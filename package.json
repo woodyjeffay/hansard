@@ -1,0 +1,6 @@
+  {
+     "name": "hansard-word-watch",
+     "type": "module",
+     "scripts": { "start": "node server.mjs" },
+     "engines": { "node": ">=18" }
+   }

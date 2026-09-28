@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hansard Word Watch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --surface: #fcfcfb;
+      --panel: #ffffff;
+      --border: #e3e2de;
+      --text: #0b0b0b;
+      --muted: #52514e;
+      --faint: #efeeea;
+      --accent: #2a78d6;
+      --mark: #fff1a8;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface: #1a1a19;
+        --panel: #232322;
+        --border: #3a3a38;
+        --text: #ffffff;
+        --muted: #c3c2b7;
+        --faint: #2c2c2a;
+        --accent: #3987e5;
+        --mark: #5c4d00;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--surface);
+      color: var(--text);
+      font: 17px/1.5 "EB Garamond", Georgia, serif;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 32px 16px; }
+    h1 { margin: 0 0 4px; }
+    .lede { margin: 0 0 20px; color: var(--muted); }
+
+    form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      align-items: end;
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+    input, select, button {
+      font: inherit;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    input, select { width: 100%; min-width: 0; }
+    button { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: 0.6; cursor: wait; }
+
+    #status { min-height: 1.5em; margin: 16px 0; color: var(--muted); }
+
+    #key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 12px; font-size: 0.85rem; color: var(--muted); }
+    .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+    /* One row per month */
+    .row {
+      display: grid;
+      grid-template-columns: 72px 1fr 40px;
+      gap: 10px;
+      align-items: center;
+      padding: 2px 4px;
+      margin: 0 -4px 2px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+    .row.clickable { cursor: pointer; }
+    .row.clickable:hover, .row.open { background: var(--faint); }
+    .row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .month { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .total { text-align: right; font-variant-numeric: tabular-nums; }
+    .row.empty .total { color: var(--muted); }
+    .bar { display: flex; gap: 2px; height: 18px; }
+    .segment { height: 100%; }
+    .segment:first-child { border-radius: 4px 0 0 4px; }
+    .segment:last-child { border-radius: 0 4px 4px 0; }
+    .segment:only-child { border-radius: 4px; }
+    /* An empty month: a faint line, so the gap is visible rather than missing */
+    .bar.none { height: 2px; background: var(--border); border-radius: 1px; }
+
+    /* Hover: fade the other parties in the row so the one under the mouse stands out */
+    .bar:hover .segment { opacity: 0.45; }
+    .bar:hover .segment:hover { opacity: 1; }
+
+    #tooltip {
+      position: fixed;
+      display: none;
+      min-width: 160px;
+      padding: 8px 10px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+      font-size: 0.85rem;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #tooltip .tip-month { font-weight: 600; margin-bottom: 4px; }
+    #tooltip .tip-row { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); }
+    #tooltip .tip-row.current { color: var(--text); font-weight: 600; }
+    #tooltip .tip-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; display: flex; justify-content: space-between; }
+    #tooltip .tip-hint { margin-top: 4px; font-size: 0.75rem; color: var(--muted); }
+
+    /* The list of speeches that opens under a month */
+    .details {
+      margin: 4px 0 12px;
+      padding: 4px 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .details h2 { font-size: 1rem; margin: 12px 0 4px; }
+    .speech { padding: 12px 0; border-top: 1px solid var(--border); }
+    .speech:first-of-type { border-top: none; }
+    .who { font-weight: 600; }
+    .meta { font-size: 0.85rem; color: var(--muted); }
+    .quote { margin: 6px 0; }
+    .quote mark { background: var(--mark); color: inherit; padding: 0 2px; border-radius: 2px; }
+    .link { font-size: 0.85rem; color: var(--accent); }
+    .link.waiting { color: var(--muted); }
+
+    /* The constituency map */
+    :root {
+      --zero: #eeede9;          /* a seat whose MP didn't say it */
+      --r1: #b0aea8; --r2: #8c8a84; --r3: #68665f; --r4: #45443f; --r5: #1c1c1a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --zero: #2b2b29;
+        --r1: #66655f; --r2: #8a8882; --r3: #adaba5; --r4: #d0cec8; --r5: #f6f5f1;
+      }
+    }
+    #map-section { margin-top: 40px; }
+    #map-section h2 { margin: 0 0 4px; font-size: 1.4rem; }
+    .map-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin: 8px 0 12px; }
+    .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .toggle button { background: var(--surface); color: var(--muted); border: none; border-radius: 0; font-weight: 400; padding: 6px 12px; }
+    .toggle button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+    .map-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); gap: 24px; align-items: start; }
+    @media (max-width: 720px) { .map-layout { grid-template-columns: 1fr; } }
+    #hexmap svg { width: 100%; height: auto; max-height: 760px; display: block; }
+    #hexmap polygon { stroke: var(--surface); stroke-width: 1; }
+    #hexmap polygon.zero { fill: var(--zero); }
+    #hexmap polygon.r1 { fill: var(--r1); } #hexmap polygon.r2 { fill: var(--r2); }
+    #hexmap polygon.r3 { fill: var(--r3); } #hexmap polygon.r4 { fill: var(--r4); }
+    #hexmap polygon.r5 { fill: var(--r5); }
+    #hexmap polygon.said { cursor: pointer; }
+    #hexmap polygon.said:hover, #hexmap polygon.picked { stroke: var(--text); stroke-width: 2; }
+    #map-key { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; }
+    .map-note { font-size: 0.85rem; color: var(--muted); margin: 8px 0 0; }
+    .top-seats h3 { font-size: 1rem; margin: 0 0 6px; }
+    .top-seats ol { margin: 0; padding: 0; list-style: none; }
+    .top-seats li button {
+      width: 100%; display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center;
+      text-align: left; background: none; border: none; border-radius: 6px; color: var(--text);
+      font-weight: 400; padding: 5px 6px; cursor: pointer;
+    }
+    .top-seats li button:hover, .top-seats li button.picked { background: var(--faint); }
+    .top-seats .seat-name { line-height: 1.25; }
+    .top-seats .seat-mp { display: block; font-size: 0.8rem; color: var(--muted); }
+    .top-seats .seat-count { font-variant-numeric: tabular-nums; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Hansard Word Watch</h1>
+    <p class="lede">Who in Parliament is saying it, month by month, by party.</p>
+
+    <form id="search">
+      <label>Word or phrase <input id="word"></label>
+        <script>
+const placeholders = ["nuclear submarine", "grey belt", "brexit", "electoral reform", "dodgy dave", "hs2", "number ten north", "gaza", "ukraine", "donald trump", "small boats", "child poverty", "harry and meghan", "immigration reform", "elon musk", "video assistant referee", "iran war", "cost of living", "green energy", "wind farm"];
+const random = Math.floor(Math.random() * placeholders.length);
+
+document.getElementById("word").value = placeholders[random];
+      </script>
+    
+      <label>From <input id="start" type="date" value="2024-07-01"></label>
+      <label>To <input id="end" type="date" value="2025-12-31"></label>
+      <label>House
+        <select id="house">
+          <option value="">Both</option>
+          <option value="Commons">Commons</option>
+          <option value="Lords">Lords</option>
+        </select>
+      </label>
+      <button>Chart it</button>
+    </form>
+
+    <p id="status"></p>
+    <div id="key"></div>
+    <div id="chart"></div>
+
+    <section id="map-section" hidden>
+      <h2>Where it was said</h2>
+      <p class="lede">Each hexagon is one constituency, all drawn the same size. A seat is filled in if its MP used the phrase.</p>
+      <div class="map-top">
+        <div id="map-key"></div>
+        <div class="toggle" role="group" aria-label="Colour the map by">
+          <button type="button" data-view="party" aria-pressed="true">By party</button>
+          <button type="button" data-view="count" aria-pressed="false">By how often</button>
+        </div>
+      </div>
+      <div class="map-layout">
+        <div id="hexmap"></div>
+        <div class="top-seats">
+          <h3>Seats whose MPs said it most</h3>
+          <ol id="top-seats"></ol>
+          <p class="map-note" id="map-note"></p>
+        </div>
+      </div>
+      <div id="seat-details"></div>
+    </section>
+  </main>
+
+  <div id="tooltip"></div>
+
+  <script>
+    // Our own server (server.mjs) passes these on to Parliament.
+    // The browser isn't allowed to ask Parliament directly.
+    const url = "/api/speeches";
+
+    // Party colours. Anything not listed counts as Other.
+    const COLOURS = {
+      Con:    "#0087dc",
+      Lab:    "#e4003b",
+      LD:     "#faa61a",
+      SNP:    "#e6c800",
+      Reform: "#12b6cf",
+      Green:  "#02a95b",
+      CB:     "#8e6bbf",
+      Other:  "#9a9a96",
+    };
+
+    // --- 0. Talking to our server --------------------------------------------
+
+    const NO_SERVER = "Couldn’t reach the server. Check Terminal is still running node server.mjs, and that the address bar says http://localhost:3000.";
+
+    // Like fetch, but if the server can't be reached at all, say so plainly
+    // (instead of the browser's "NetworkError" or "Failed to fetch").
+    async function ask(path) {
+      try {
+        return await fetch(path);
+      } catch (error) {
+        throw new Error(NO_SERVER);
+      }
+    }
+
+    // Opened by double-clicking the file? Then there's no server to ask.
+    if (location.protocol === "file:") {
+      window.addEventListener("DOMContentLoaded", () => {
+        setStatus("This page needs its server. In Terminal, in this folder, run node server.mjs, then open http://localhost:3000.");
+      });
+    }
+
+    // --- 1. Fetch every speech, 100 at a time -------------------------------
+
+    async function getSpeeches(word, start, end, house) {
+      let speeches = [];
+      let skip = 0;
+
+      while (true) {
+        const settings = new URLSearchParams({
+          "queryParameters.searchTerm": word,
+          "queryParameters.startDate": start,
+          "queryParameters.endDate": end,
+          "queryParameters.take": 100,
+          "queryParameters.skip": skip,
+        });
+        // Only ask for one House if one was chosen. "Both" means leave it out.
+        if (house !== "") {
+          settings.set("queryParameters.house", house);
+        }
+        const response = await ask(url + "?" + settings);
+        if (response.status === 500) {
+          // Parliament's search gives up after about 30 seconds on very common words
+          throw new Error("Parliament’s search gave up. The words are probably too common (like “your” and “party”). Try a more distinctive phrase or a shorter date range.");
+        }
+        if (!response.ok) {
+          throw new Error("the server replied " + response.status);
+        }
+        const data = await response.json();
+        const page = data.Results;
+        speeches = speeches.concat(page);
+        skip = skip + 100;
+        setStatus("Fetched " + speeches.length + " of " + data.TotalResultCount + "…");
+        if (page.length === 0 || skip >= data.TotalResultCount || skip >= 2000) {
+          break;
+        }
+      }
+      return speeches;
+    }
+
+    // --- 1b. Keep only speeches with the exact phrase ------------------------
+    //
+    // Parliament's search matches the words anywhere in a speech, so
+    // "grey belt" also finds "grey water ... green belt". This keeps only
+    // speeches where the words appear together, in order. A hyphen counts
+    // as a space, so "grey-belt" is kept too.
+
+    // Turn "grey belt" into the pattern: grey, then spaces or hyphens, then belt
+    function makePattern(phrase) {
+      const words = phrase.trim().split(/\s+/);
+      const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      return new RegExp("\\b" + escaped.join("[\\s\\-]+") + "\\b", "i");
+    }
+
+    // The speech text comes with bits of HTML in it. This turns it into
+    // plain text, and turns codes like &amp; back into &.
+    function plainText(speech) {
+      const html = speech.ContributionTextFull ?? "";
+      return new DOMParser().parseFromString(html, "text/html").body.textContent;
+    }
+
+    function keepExactMatches(speeches, pattern) {
+      const kept = [];
+      for (const speech of speeches) {
+        if (pattern.test(plainText(speech))) {
+          kept.push(speech);
+        }
+      }
+      return kept;
+    }
+
+    // --- 2. Look up each speaker's party history -----------------------------
+    //
+    // Hansard's names often have no party in them ("Matthew Pennycook"),
+    // so instead we look each speaker up by their MemberId in Parliament's
+    // Members API, which lists every party they've belonged to, with dates.
+
+    // Full party names from the Members API, and the short labels we use.
+    // Anything not listed counts as Other.
+    const SHORT_NAMES = {
+      "Conservative": "Con",
+      "Labour": "Lab",
+      "Labour (Co-op)": "Lab",
+      "Liberal Democrat": "LD",
+      "Scottish National Party": "SNP",
+      "Reform UK": "Reform",
+      "Green Party": "Green",
+      "Crossbench": "CB",
+    };
+
+    // Remembered between searches, so we only look each member up once.
+    const histories = {};
+
+    async function getPartyHistories(speeches) {
+      // Everyone who spoke, each listed once, who we haven't looked up yet
+      const ids = [];
+      for (const speech of speeches) {
+        if (!(speech.MemberId in histories) && !ids.includes(speech.MemberId)) {
+          ids.push(speech.MemberId);
+        }
+      }
+
+      // Ask 20 at a time, so we don't flood Parliament with requests
+      for (let i = 0; i < ids.length; i = i + 20) {
+        const batch = ids.slice(i, i + 20);
+        await Promise.all(batch.map(async (id) => {
+          const response = await ask("/api/member?id=" + id);
+          if (response.ok) {
+            const data = await response.json();
+            histories[id] = {
+              parties: data.value.partyAffiliations,   // every party, with dates
+              seats: data.value.representations,       // every constituency, with dates (empty for peers)
+            };
+          } else {
+            histories[id] = { parties: [], seats: [] };   // couldn't find them: they'll count as Other
+          }
+        }));
+        setStatus("Looked up " + Math.min(i + 20, ids.length) + " of " + ids.length + " speakers…");
+      }
+    }
+
+    // Which party was this member in on this date?
+    function getParty(memberId, date) {
+      for (const spell of histories[memberId]?.parties ?? []) {
+        const started = spell.startDate.slice(0, 10);
+        const ended = spell.endDate === null ? null : spell.endDate.slice(0, 10);
+        if (started <= date && (ended === null || date < ended)) {
+          return SHORT_NAMES[spell.name] ?? "Other";
+        }
+      }
+      return "Other";
+    }
+
+    // Which constituency did this member represent on this date?
+    // Only counts seats drawn on the 2024 boundaries, because that's what the
+    // map shows. Returns null for peers, and for speeches from before the
+    // 2024 election (when the seats had different boundaries).
+    const NEW_BOUNDARIES = "2024-05-31";
+
+    function getSeat(memberId, date) {
+      for (const seat of histories[memberId]?.seats ?? []) {
+        const started = seat.startDate.slice(0, 10);
+        const ended = seat.endDate === null ? null : seat.endDate.slice(0, 10);
+        const newBoundaries = seat.constituencyStart !== null && seat.constituencyStart.slice(0, 10) >= NEW_BOUNDARIES;
+        if (newBoundaries && started <= date && (ended === null || date < ended)) {
+          return seat.name;
+        }
+      }
+      return null;
+    }
+
+    // --- 3. Sort the speeches into months ------------------------------------
+
+    // { "2024-12": [speech, speech, ...], "2025-01": [...] }
+    // Each speech also gets a .party and a .seat, so we only work them out once.
+    function groupByMonth(speeches) {
+      const months = {};
+      for (const speech of speeches) {
+        speech.party = getParty(speech.MemberId, speech.SittingDate.slice(0, 10));
+        speech.seat = getSeat(speech.MemberId, speech.SittingDate.slice(0, 10));
+        const month = speech.SittingDate.slice(0, 7);
+        if (!(month in months)) {
+          months[month] = [];
+        }
+        months[month].push(speech);
+      }
+      return months;
+    }
+
+    // How many speeches from each party in a list: { Con: 3, Lab: 5 }
+    function countParties(speeches) {
+      const counts = {};
+      for (const speech of speeches) {
+        counts[speech.party] = (counts[speech.party] ?? 0) + 1;
+      }
+      return counts;
+    }
+
+    // Every month from start to end, including the ones nobody spoke in.
+    // monthRange("2024-11-15", "2025-02-01") -> ["2024-11", "2024-12", "2025-01", "2025-02"]
+    function monthRange(start, end) {
+      let year = Number(start.slice(0, 4));
+      let month = Number(start.slice(5, 7));
+      const endYear = Number(end.slice(0, 4));
+      const endMonth = Number(end.slice(5, 7));
+      const months = [];
+      while (year < endYear || (year === endYear && month <= endMonth)) {
+        months.push(year + "-" + String(month).padStart(2, "0"));
+        month = month + 1;
+        if (month === 13) {
+          month = 1;
+          year = year + 1;
+        }
+      }
+      return months;
+    }
+
+    // "2024-12" -> "Dec 2024", or "December 2024" when long is true
+    function monthLabel(month, long = false) {
+      const date = new Date(month + "-01T12:00:00");
+      return date.toLocaleDateString("en-GB", { month: long ? "long" : "short", year: "numeric" });
+    }
+
+    // --- 4. Draw it ----------------------------------------------------------
+
+    function draw(months, allMonths) {
+      // The key
+      let keyHtml = "";
+      for (const party in COLOURS) {
+        keyHtml += `<span><span class="swatch" style="background:${COLOURS[party]}"></span>${party}</span>`;
+      }
+      document.getElementById("key").innerHTML = keyHtml;
+
+      // The busiest month sets the full width; every other bar is scaled to it.
+      let biggest = 0;
+      for (const month in months) {
+        if (months[month].length > biggest) {
+          biggest = months[month].length;
+        }
+      }
+
+      // One row per month, including empty ones
+      let chartHtml = "";
+      for (const month of allMonths) {
+        const speeches = months[month] ?? [];
+        const counts = countParties(speeches);
+        const total = speeches.length;
+
+        let segments = "";
+        for (const party in COLOURS) {
+          const n = counts[party] ?? 0;
+          if (n > 0) {
+            const width = (n / biggest) * 100;
+            segments += `<div class="segment" style="width:${width}%; background:${COLOURS[party]}" data-month="${month}" data-party="${party}"></div>`;
+          }
+        }
+
+        if (total === 0) {
+          chartHtml += `<div class="row empty"><span class="month">${monthLabel(month)}</span><div class="bar none"></div><span class="total">0</span></div>`;
+        } else {
+          chartHtml += `<div class="row clickable" data-month="${month}" tabindex="0" role="button" aria-expanded="false"><span class="month">${monthLabel(month)}</span><div class="bar">${segments}</div><span class="total">${total}</span></div>`;
+        }
+      }
+      document.getElementById("chart").innerHTML = chartHtml;
+      latestMonths = months;   // remember them for the tooltip and the details
+    }
+
+    // --- 5. Tooltip: show a month's breakdown when the mouse is over a bar ---
+
+    let latestMonths = {};
+    const tooltip = document.getElementById("tooltip");
+
+    document.getElementById("chart").addEventListener("mousemove", (event) => {
+      // Which coloured section is the mouse over? (null if it's anywhere else)
+      const segment = event.target.closest(".segment");
+      if (segment === null) {
+        tooltip.style.display = "none";
+        return;
+      }
+
+      const month = segment.dataset.month;
+      const hovered = segment.dataset.party;
+      const counts = countParties(latestMonths[month]);
+
+      // Build the tooltip: every party that spoke that month, then the total
+      let html = `<div class="tip-month">${monthLabel(month, true)}</div>`;
+      let total = 0;
+      for (const party in COLOURS) {
+        const n = counts[party] ?? 0;
+        if (n > 0) {
+          const current = party === hovered ? " current" : "";
+          html += `<div class="tip-row${current}"><span><span class="swatch" style="background:${COLOURS[party]}"></span>${party}</span><span>${n}</span></div>`;
+          total = total + n;
+        }
+      }
+      html += `<div class="tip-total"><span>Total</span><span>${total}</span></div>`;
+      html += `<div class="tip-hint">Click to read the speeches</div>`;
+      tooltip.innerHTML = html;
+      placeTooltip(event);
+    });
+
+    // Show the tooltip just below-right of the mouse, but keep it on screen
+    function placeTooltip(event) {
+      tooltip.style.display = "block";
+      let x = event.clientX + 14;
+      let y = event.clientY + 14;
+      if (x + tooltip.offsetWidth > window.innerWidth - 8) {
+        x = event.clientX - tooltip.offsetWidth - 14;
+      }
+      if (y + tooltip.offsetHeight > window.innerHeight - 8) {
+        y = event.clientY - tooltip.offsetHeight - 14;
+      }
+      tooltip.style.left = x + "px";
+      tooltip.style.top = y + "px";
+    }
+
+    document.getElementById("chart").addEventListener("mouseleave", () => {
+      tooltip.style.display = "none";
+    });
+
+    // --- 6. Click a month to read its speeches -------------------------------
+
+    let latestPattern = null;   // the phrase pattern from the last search
+    const links = {};           // Hansard web links we've already looked up
+
+    // Make text safe to put inside HTML (so a stray < in a speech can't break the page)
+    function escapeHtml(text) {
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    // The bit of the speech around the phrase, with the phrase highlighted
+    function snippet(speech) {
+      const text = plainText(speech).replace(/\s+/g, " ");
+      const match = latestPattern.exec(text);
+      if (match === null) {
+        return escapeHtml(text.slice(0, 300)) + "…";
+      }
+      let from = Math.max(0, match.index - 220);
+      let to = Math.min(text.length, match.index + match[0].length + 220);
+      // Don't cut words in half
+      if (from > 0) from = text.indexOf(" ", from) + 1;
+      if (to < text.length) to = text.lastIndexOf(" ", to);
+
+      const before = escapeHtml(text.slice(from, match.index));
+      const phrase = escapeHtml(match[0]);
+      const after = escapeHtml(text.slice(match.index + match[0].length, to));
+      return (from > 0 ? "…" : "") + before + "<mark>" + phrase + "</mark>" + after + (to < text.length ? "…" : "");
+    }
+
+    function speechHtml(speech) {
+      const date = new Date(speech.SittingDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+      const id = speech.ContributionExtId;
+      const link = links[id]
+        ? `<a class="link" href="${links[id]}" target="_blank" rel="noopener">Read in Hansard ↗</a>`
+        : `<a class="link waiting" data-id="${id}">Finding link…</a>`;
+      return `
+        <div class="speech">
+          <div class="who"><span class="swatch" style="background:${COLOURS[speech.party]}"></span>${escapeHtml(speech.MemberName)} <span class="meta">(${speech.party})</span></div>
+          <div class="meta">${date} · ${speech.House} · ${escapeHtml(speech.DebateSection.trim())}</div>
+          <p class="quote">${snippet(speech)}</p>
+          ${link}
+        </div>`;
+    }
+
+    // Ask Parliament for the web address of each speech, 20 at a time
+    async function fillInLinks(panel, speeches) {
+      const missing = speeches.filter((s) => !(s.ContributionExtId in links));
+      for (let i = 0; i < missing.length; i = i + 20) {
+        const batch = missing.slice(i, i + 20);
+        await Promise.all(batch.map(async (speech) => {
+          const id = speech.ContributionExtId;
+          try {
+            const response = await ask("/api/link?id=" + id);
+            if (response.ok) {
+              const path = await response.json();   // like "/Commons/2024-12-12/debates/..."
+              links[id] = "https://hansard.parliament.uk" + path;
+            }
+          } catch (error) {
+            // leave it; the link will say it couldn't be found
+          }
+          const a = panel.querySelector(`[data-id="${id}"]`);
+          if (a !== null) {
+            if (links[id]) {
+              a.href = links[id];
+              a.target = "_blank";
+              a.rel = "noopener";
+              a.textContent = "Read in Hansard ↗";
+              a.classList.remove("waiting");
+            } else {
+              a.textContent = "Couldn’t find the link";
+            }
+          }
+        }));
+      }
+    }
+
+    function toggleMonth(row) {
+      const month = row.dataset.month;
+      const alreadyOpen = row.classList.contains("open");
+
+      // Close whatever is open
+      for (const panel of document.querySelectorAll(".details")) panel.remove();
+      for (const open of document.querySelectorAll(".row.open")) {
+        open.classList.remove("open");
+        open.setAttribute("aria-expanded", "false");
+      }
+      if (alreadyOpen) return;   // clicking an open month just closes it
+
+      // Oldest first; within a day, in the order they were said
+      const speeches = [...latestMonths[month]].sort((a, b) =>
+        a.SittingDate.localeCompare(b.SittingDate) || a.OrderInDebateSection - b.OrderInDebateSection);
+
+      const panel = document.createElement("div");
+      panel.className = "details";
+      let html = `<h2>${monthLabel(month, true)}: ${speeches.length} speech${speeches.length === 1 ? "" : "es"}</h2>`;
+      for (const speech of speeches) {
+        html += speechHtml(speech);
+      }
+      panel.innerHTML = html;
+      row.after(panel);
+      row.classList.add("open");
+      row.setAttribute("aria-expanded", "true");
+
+      fillInLinks(panel, speeches);
+    }
+
+    document.getElementById("chart").addEventListener("click", (event) => {
+      const row = event.target.closest(".row.clickable");
+      if (row !== null) {
+        tooltip.style.display = "none";
+        toggleMonth(row);
+      }
+    });
+
+    // Keyboard: Enter or Space on a focused month opens it too
+    document.getElementById("chart").addEventListener("keydown", (event) => {
+      const row = event.target.closest(".row.clickable");
+      if (row !== null && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        toggleMonth(row);
+      }
+    });
+
+    // --- 7. The constituency map ---------------------------------------------
+    //
+    // map.hexjson.json has one hexagon per constituency:
+    //   "E14001063": { "n": "Greenwich and Woolwich", "q": 66, "r": -40 }
+    // n is the name; q is the column and r the row (higher r is further north).
+
+    let hexes = null;          // the hex map, loaded once
+    let seatData = {};         // { "Greenwich and Woolwich": { speeches: [...], mps: [...], party: "Lab" } }
+    let mapView = "party";     // "party" or "count"
+    let pickedSeat = null;     // the seat whose speeches are open, if any
+
+    // Bands for the "how often" view: [lowest count in the band, label]
+    const COUNT_BANDS = [[1, "1"], [2, "2"], [3, "3–5"], [6, "6–10"], [11, "11+"]];
+
+    // Which band (1 to 5) a count falls in
+    function band(n) {
+      let result = 0;
+      for (let i = 0; i < COUNT_BANDS.length; i++) {
+        if (n >= COUNT_BANDS[i][0]) result = i + 1;
+      }
+      return result;
+    }
+
+    async function loadHexes() {
+      if (hexes === null) {
+        const response = await ask("/map.hexjson.json");
+        if (!response.ok) {
+          throw new Error("couldn’t load map.hexjson.json");
+        }
+        hexes = (await response.json()).hexes;
+      }
+    }
+
+    // Group speeches by the constituency the speaker represented at the time
+    function groupBySeat(speeches) {
+      const seats = {};
+      for (const speech of speeches) {
+        if (speech.seat === null) continue;   // peers, and speeches before July 2024
+        if (!(speech.seat in seats)) {
+          seats[speech.seat] = { speeches: [], mps: [] };
+        }
+        seats[speech.seat].speeches.push(speech);
+        if (!seats[speech.seat].mps.includes(speech.MemberName)) {
+          seats[speech.seat].mps.push(speech.MemberName);
+        }
+      }
+      // Colour each seat by the party of its most recent speech
+      // (so an MP who defected shows in their new party)
+      for (const name in seats) {
+        let latest = seats[name].speeches[0];
+        for (const speech of seats[name].speeches) {
+          if (speech.SittingDate > latest.SittingDate) latest = speech;
+        }
+        seats[name].party = latest.party;
+      }
+      return seats;
+    }
+
+    function drawMap() {
+      // Hexagon size and spacing. Pointy-topped hexagons in rows, with
+      // every odd row nudged half a hexagon to the right.
+      const size = 10;
+      const w = Math.sqrt(3) * size;   // width of one hexagon
+      const all = Object.values(hexes);
+      const qMin = Math.min(...all.map((h) => h.q));
+      const qMax = Math.max(...all.map((h) => h.q));
+      const rMin = Math.min(...all.map((h) => h.r));
+      const rMax = Math.max(...all.map((h) => h.r));
+      const width = (qMax - qMin + 1.5) * w;
+      const height = (rMax - rMin) * 1.5 * size + 2 * size;
+
+      let shapes = "";
+      for (const code in hexes) {
+        const hex = hexes[code];
+        const odd = (hex.r & 1) === 1;
+        const cx = (hex.q - qMin) * w + (odd ? w / 2 : 0) + w / 2;
+        const cy = (rMax - hex.r) * 1.5 * size + size;
+
+        // The six corners, starting top-right and going round
+        const corners = [];
+        for (let i = 0; i < 6; i++) {
+          const angle = (Math.PI / 180) * (60 * i - 30);
+          corners.push((cx + size * Math.cos(angle)).toFixed(1) + "," + (cy + size * Math.sin(angle)).toFixed(1));
+        }
+
+        const seat = seatData[hex.n];
+        let classes = "zero";
+        let style = "";
+        if (seat) {
+          classes = "said";
+          if (mapView === "party") {
+            style = ` style="fill:${COLOURS[seat.party]}"`;
+          } else {
+            classes += " r" + band(seat.speeches.length);
+          }
+        }
+        if (hex.n === pickedSeat) classes += " picked";
+        shapes += `<polygon points="${corners.join(" ")}" class="${classes}" data-seat="${escapeHtml(hex.n)}"${style}></polygon>`;
+      }
+
+      const saidCount = Object.keys(seatData).length;
+      document.getElementById("hexmap").innerHTML =
+        `<svg viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" role="img" aria-label="Hex map of the 650 constituencies. ${saidCount} are filled in because their MP used the phrase. The list alongside gives the top seats.">${shapes}</svg>`;
+
+      // Bring the picked seat to the front so its outline isn't hidden by its neighbours
+      const picked = document.querySelector("#hexmap polygon.picked");
+      if (picked) picked.parentNode.appendChild(picked);
+
+      drawMapKey();
+    }
+
+    function drawMapKey() {
+      let html = "";
+      if (mapView === "party") {
+        // Only the parties that actually appear on the map
+        const present = new Set(Object.values(seatData).map((s) => s.party));
+        for (const party in COLOURS) {
+          if (present.has(party)) {
+            html += `<span><span class="swatch" style="background:${COLOURS[party]}"></span>${party}</span>`;
+          }
+        }
+      } else {
+        COUNT_BANDS.forEach(([, label], i) => {
+          html += `<span><span class="swatch" style="background:var(--r${i + 1})"></span>${label}</span>`;
+        });
+      }
+      html += `<span><span class="swatch" style="background:var(--zero)"></span>Didn’t say it</span>`;
+      document.getElementById("map-key").innerHTML = html;
+    }
+
+    // The ten seats whose MPs said it most. Doubles as a way in for anyone
+    // who can't use the map, since each one opens that seat's speeches.
+    function drawTopSeats() {
+      const ranked = Object.entries(seatData).sort((a, b) => b[1].speeches.length - a[1].speeches.length).slice(0, 10);
+      let html = "";
+      for (const [name, seat] of ranked) {
+        html += `
+          <li><button type="button" data-seat="${escapeHtml(name)}">
+            <span class="swatch" style="background:${COLOURS[seat.party]}"></span>
+            <span class="seat-name">${escapeHtml(name)}<span class="seat-mp">${escapeHtml(seat.mps.join(", "))} (${seat.party})</span></span>
+            <span class="seat-count">${seat.speeches.length}</span>
+          </button></li>`;
+      }
+      document.getElementById("top-seats").innerHTML = html || "<li class=\"map-note\">No MPs used it in this period.</li>";
+    }
+
+    // Say which speeches aren't on the map, and why
+    function drawMapNote(speeches) {
+      const peers = speeches.filter((s) => s.House === "Lords").length;
+      const beforeElection = speeches.filter((s) => s.House === "Commons" && s.seat === null && s.SittingDate < "2024-07-04").length;
+      const unmatched = speeches.filter((s) => s.House === "Commons" && s.seat === null && s.SittingDate >= "2024-07-04").length;
+      const parts = [];
+      if (peers > 0) parts.push(`${peers} by peers, who don’t have constituencies`);
+      if (beforeElection > 0) parts.push(`${beforeElection} from before the July 2024 election, when the seats had different boundaries`);
+      if (unmatched > 0) parts.push(`${unmatched} whose speaker couldn’t be matched to a seat`);
+      document.getElementById("map-note").textContent = parts.length > 0 ? "Not on the map: " + parts.join("; ") + "." : "";
+    }
+
+    // Open (or close) the list of speeches for one seat
+    function showSeat(name) {
+      const details = document.getElementById("seat-details");
+      if (pickedSeat === name) {
+        pickedSeat = null;
+        details.innerHTML = "";
+      } else {
+        pickedSeat = name;
+        const seat = seatData[name];
+        const speeches = [...seat.speeches].sort((a, b) =>
+          a.SittingDate.localeCompare(b.SittingDate) || a.OrderInDebateSection - b.OrderInDebateSection);
+        let html = `<h2>${escapeHtml(name)}: ${escapeHtml(seat.mps.join(", "))} (${seat.party}), ${speeches.length} speech${speeches.length === 1 ? "" : "es"}</h2>`;
+        for (const speech of speeches) {
+          html += speechHtml(speech);
+        }
+        details.innerHTML = `<div class="details">${html}</div>`;
+        fillInLinks(details, speeches);
+        details.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+      drawMap();
+      for (const button of document.querySelectorAll("#top-seats button")) {
+        button.classList.toggle("picked", button.dataset.seat === pickedSeat);
+      }
+    }
+
+    async function showMap(speeches) {
+      await loadHexes();
+      seatData = groupBySeat(speeches);
+      pickedSeat = null;
+      document.getElementById("seat-details").innerHTML = "";
+      drawMap();
+      drawTopSeats();
+      drawMapNote(speeches);
+      document.getElementById("map-section").hidden = false;
+    }
+
+    // Hovering over a hexagon
+    const hexmap = document.getElementById("hexmap");
+
+    hexmap.addEventListener("mousemove", (event) => {
+      const shape = event.target.closest("polygon");
+      if (shape === null) {
+        tooltip.style.display = "none";
+        return;
+      }
+      const name = shape.dataset.seat;
+      const seat = seatData[name];
+      let html = `<div class="tip-month">${escapeHtml(name)}</div>`;
+      if (seat) {
+        html += `<div class="tip-row current"><span><span class="swatch" style="background:${COLOURS[seat.party]}"></span>${escapeHtml(seat.mps.join(", "))}</span><span>${seat.party}</span></div>`;
+        html += `<div class="tip-total"><span>Speeches</span><span>${seat.speeches.length}</span></div>`;
+        html += `<div class="tip-hint">Click to read them</div>`;
+        // Lift it to the front so its hover outline shows in full
+        shape.parentNode.appendChild(shape);
+      } else {
+        html += `<div class="tip-row"><span>Their MP didn’t say it in this period</span></div>`;
+      }
+      tooltip.innerHTML = html;
+      placeTooltip(event);
+    });
+
+    hexmap.addEventListener("mouseleave", () => {
+      tooltip.style.display = "none";
+    });
+
+    hexmap.addEventListener("click", (event) => {
+      const shape = event.target.closest("polygon.said");
+      if (shape !== null) {
+        tooltip.style.display = "none";
+        showSeat(shape.dataset.seat);
+      }
+    });
+
+    document.getElementById("top-seats").addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (button !== null) showSeat(button.dataset.seat);
+    });
+
+    // The By party / By how often switch
+    document.querySelector(".toggle").addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (button === null) return;
+      mapView = button.dataset.view;
+      for (const b of document.querySelectorAll(".toggle button")) {
+        b.setAttribute("aria-pressed", b === button ? "true" : "false");
+      }
+      drawMap();
+    });
+
+    // --- Wiring: run when the button is pressed ------------------------------
+
+    function setStatus(message) {
+      document.getElementById("status").textContent = message;
+    }
+
+    document.getElementById("search").addEventListener("submit", async (event) => {
+      event.preventDefault();   // stop the page reloading
+      const button = event.target.querySelector("button");
+      const word = document.getElementById("word").value;
+      const start = document.getElementById("start").value;
+      const end = document.getElementById("end").value;
+      const house = document.getElementById("house").value;
+
+      button.disabled = true;
+      try {
+        setStatus("Searching Hansard… (common words can take up to 30 seconds)");
+        const found = await getSpeeches(word, start, end, house);
+        latestPattern = makePattern(word);
+        const speeches = keepExactMatches(found, latestPattern);
+        const dropped = found.length - speeches.length;
+        await getPartyHistories(speeches);
+        draw(groupByMonth(speeches), monthRange(start, end));
+        const where = house === "" ? "Parliament" : "the " + house;
+        let message = speeches.length + " speeches in " + where + " say “" + word + "”.";
+        if (dropped > 0) {
+          message += " (" + dropped + " more had the words, but not together, so they’re left out.)";
+        }
+        setStatus(message + " Click a month to read them.");
+
+        // The map is extra: if it can't load, keep the chart and say why
+        try {
+          await showMap(speeches);
+        } catch (error) {
+          document.getElementById("map-section").hidden = true;
+          setStatus(message + " Click a month to read them. (The map didn’t load: " + error.message + ".)");
+        }
+      } catch (error) {
+        setStatus("Something went wrong: " + error.message);
+      }
+      button.disabled = false;
+    });
+  </script>
+</body>
+</html>
