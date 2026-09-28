@@ -175,6 +175,11 @@
     .top-seats .seat-name { line-height: 1.25; }
     .top-seats .seat-mp { display: block; font-size: 0.8rem; color: var(--muted); }
     .top-seats .seat-count { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+    /* Credits at the foot of the page */
+    footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
+    footer p { margin: 0 0 6px; }
+    footer a { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -245,6 +250,11 @@ document.getElementById("word").value = placeholders[random];
       </div>
       <div id="seat-details"></div>
     </section>
+
+    <footer>
+      <p>Data: speeches from <a href="https://hansard.parliament.uk" target="_blank" rel="noopener">Hansard</a>, via the <a href="https://hansard-api.parliament.uk" target="_blank" rel="noopener">Hansard API</a>; parties and constituencies from the <a href="https://members-api.parliament.uk" target="_blank" rel="noopener">UK Parliament Members API</a>; constituency hex map from <a href="https://open-innovations.org/projects/hexmaps/" target="_blank" rel="noopener">Open Innovations</a>. Contains Parliamentary information licensed under the <a href="https://www.parliament.uk/site-information/copyright-parliament/open-parliament-licence/" target="_blank" rel="noopener">Open Parliament Licence v3.0</a>.</p>
+      <p>This programme was made with the assistance of <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a>.</p>
+    </footer>
   </main>
 
   <div id="tooltip"></div>
