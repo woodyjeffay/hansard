@@ -149,7 +149,9 @@
     #map-section { margin-top: 40px; }
     #map-section h2 { margin: 0 0 4px; font-size: 1.4rem; }
     .map-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin: 8px 0 12px; }
+    .toggles { display: flex; flex-wrap: wrap; gap: 8px; }
     .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .toggle[hidden] { display: none; }
     .toggle button { background: var(--surface); color: var(--muted); border: none; border-radius: 0; font-weight: 400; padding: 6px 12px; }
     .toggle button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
     .map-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); gap: 24px; align-items: start; }
@@ -232,12 +234,18 @@ document.getElementById("word").value = placeholders[random];
 
     <section id="map-section" hidden>
       <h2>Where it was said</h2>
-      <p class="lede">Each hexagon is one constituency, all drawn the same size. A seat is filled in if its MP used the phrase.</p>
+      <p class="lede">Each hexagon is one constituency<span id="map-which"></span>, all drawn the same size. A seat is filled in if its MP used the phrase.</p>
       <div class="map-top">
         <div id="map-key"></div>
-        <div class="toggle" role="group" aria-label="Colour the map by">
-          <button type="button" data-view="party" aria-pressed="true">By party</button>
-          <button type="button" data-view="count" aria-pressed="false">By how often</button>
+        <div class="toggles">
+          <div class="toggle" id="era-toggle" role="group" aria-label="Which seats" hidden>
+            <button type="button" data-map="old" aria-pressed="false">2010–2024 seats</button>
+            <button type="button" data-map="current" aria-pressed="true">Seats since 2024</button>
+          </div>
+          <div class="toggle" id="view-toggle" role="group" aria-label="Colour the map by">
+            <button type="button" data-view="party" aria-pressed="true">By party</button>
+            <button type="button" data-view="count" aria-pressed="false">By how often</button>
+          </div>
         </div>
       </div>
       <div class="map-layout">
@@ -252,7 +260,7 @@ document.getElementById("word").value = placeholders[random];
     </section>
 
     <footer>
-      <p>Data: speeches from <a href="https://hansard.parliament.uk" target="_blank" rel="noopener">Hansard</a>, via the <a href="https://hansard-api.parliament.uk" target="_blank" rel="noopener">Hansard API</a>; parties and constituencies from the <a href="https://members-api.parliament.uk" target="_blank" rel="noopener">UK Parliament Members API</a>; constituency hex map from <a href="https://open-innovations.org/projects/hexmaps/" target="_blank" rel="noopener">Open Innovations</a>. Contains Parliamentary information licensed under the <a href="https://www.parliament.uk/site-information/copyright-parliament/open-parliament-licence/" target="_blank" rel="noopener">Open Parliament Licence v3.0</a>.</p>
+      <p>Data: speeches from <a href="https://hansard.parliament.uk" target="_blank" rel="noopener">Hansard</a>, via the <a href="https://hansard-api.parliament.uk" target="_blank" rel="noopener">Hansard API</a>; parties and constituencies from the <a href="https://members-api.parliament.uk" target="_blank" rel="noopener">UK Parliament Members API</a>; constituency hex maps from <a href="https://open-innovations.org/projects/hexmaps/" target="_blank" rel="noopener">Open Innovations</a>. Contains Parliamentary information licensed under the <a href="https://www.parliament.uk/site-information/copyright-parliament/open-parliament-licence/" target="_blank" rel="noopener">Open Parliament Licence v3.0</a>.</p>
       <p>This programme was made with the assistance of <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a>.</p>
     </footer>
   </main>
@@ -429,19 +437,44 @@ document.getElementById("word").value = placeholders[random];
     }
 
     // Which constituency did this member represent on this date?
-    // Only counts seats drawn on the 2024 boundaries, because that's what the
-    // map shows. Returns null for peers, and for speeches from before the
-    // 2024 election (when the seats had different boundaries).
-    const NEW_BOUNDARIES = "2024-05-31";
-
+    // Returns null for peers, who don't have one.
     function getSeat(memberId, date) {
       for (const seat of histories[memberId]?.seats ?? []) {
         const started = seat.startDate.slice(0, 10);
         const ended = seat.endDate === null ? null : seat.endDate.slice(0, 10);
-        const newBoundaries = seat.constituencyStart !== null && seat.constituencyStart.slice(0, 10) >= NEW_BOUNDARIES;
-        if (newBoundaries && started <= date && (ended === null || date < ended)) {
+        if (started <= date && (ended === null || date < ended)) {
           return seat.name;
         }
+      }
+      return null;
+    }
+
+    // The seats were redrawn for the July 2024 election, so there are two
+    // maps. Each speech goes on the map of the seats in use when it was made.
+    // (Scotland's seats were drawn in 2005 and unchanged in 2010, so the
+    // 2010 map covers them too.)
+    // (The newest map comes first: it's the one shown when a search needs both.)
+    const MAPS = {
+      current: {
+        file: "/map.hexjson.json",
+        from: "2024-07-04", to: "9999-12-31",
+        label: "Seats since 2024",
+        which: " on the seats used since July 2024",
+        when: "after the July 2024 election",
+      },
+      old: {
+        file: "/map-2010.hexjson.json",
+        from: "2010-05-06", to: "2024-07-04",
+        label: "2010–2024 seats",
+        which: " on the seats used from 2010 to 2024",
+        when: "before the July 2024 election",
+      },
+    };
+
+    // Which map a speech on this date belongs on: "current", "old", or null (before 2010)
+    function getMap(date) {
+      for (const era in MAPS) {
+        if (MAPS[era].from <= date && date < MAPS[era].to) return era;
       }
       return null;
     }
@@ -449,12 +482,14 @@ document.getElementById("word").value = placeholders[random];
     // --- 3. Sort the speeches into months ------------------------------------
 
     // { "2024-12": [speech, speech, ...], "2025-01": [...] }
-    // Each speech also gets a .party and a .seat, so we only work them out once.
+    // Each speech also gets a .party, .seat and .map, so we only work them out once.
     function groupByMonth(speeches) {
       const months = {};
       for (const speech of speeches) {
-        speech.party = getParty(speech.MemberId, speech.SittingDate.slice(0, 10));
-        speech.seat = getSeat(speech.MemberId, speech.SittingDate.slice(0, 10));
+        const date = speech.SittingDate.slice(0, 10);
+        speech.party = getParty(speech.MemberId, date);
+        speech.seat = getSeat(speech.MemberId, date);
+        speech.map = getMap(date);
         const month = speech.SittingDate.slice(0, 7);
         if (!(month in months)) {
           months[month] = [];
@@ -724,7 +759,10 @@ document.getElementById("word").value = placeholders[random];
     //   "E14001063": { "n": "Greenwich and Woolwich", "q": 66, "r": -40 }
     // n is the name; q is the column and r the row (higher r is further north).
 
-    let hexes = null;          // the hex map, loaded once
+    const hexMaps = {};        // each map, loaded once: { current: { hexes, names }, old: ... }
+    let hexes = null;          // the hexagons of the map on screen
+    let shownMap = "current";  // which map is on screen: "current" or "old"
+    let mapSpeeches = [];      // the latest search's speeches
     let seatData = {};         // { "Greenwich and Woolwich": { speeches: [...], mps: [...], party: "Lab" } }
     let mapView = "party";     // "party" or "count"
     let pickedSeat = null;     // the seat whose speeches are open, if any
@@ -741,27 +779,58 @@ document.getElementById("word").value = placeholders[random];
       return result;
     }
 
-    async function loadHexes() {
-      if (hexes === null) {
-        const response = await ask("/map.hexjson.json");
+    // Seat names are written slightly differently in different places
+    // ("Brighton, Kemptown", "Ynys Môn"), so compare them in a plain form:
+    // "Brighton, Kemptown" -> "brighton kemptown", "Ynys Môn" -> "ynys mon"
+    function plainName(name) {
+      return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+        .replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+    }
+
+    async function loadHexes(era) {
+      if (!(era in hexMaps)) {
+        const response = await ask(MAPS[era].file);
         if (!response.ok) {
-          throw new Error("couldn’t load map.hexjson.json");
+          throw new Error("couldn’t load " + MAPS[era].file.slice(1));
         }
-        hexes = (await response.json()).hexes;
+        const map = (await response.json()).hexes;
+        // So a seat's hexagon can be found from the plain form of its name
+        const names = {};
+        for (const code in map) {
+          names[plainName(map[code].n)] = map[code].n;
+        }
+        hexMaps[era] = { hexes: map, names: names };
       }
     }
 
-    // Group speeches by the constituency the speaker represented at the time
-    function groupBySeat(speeches) {
+    // Find each MP's seat on its map. Sets speech.hex to the seat's name as
+    // the map spells it, or null if it isn't on a map.
+    function findHexes(speeches) {
+      const notFound = new Set();
+      for (const speech of speeches) {
+        speech.hex = null;
+        if (speech.seat === null || speech.map === null) continue;   // peers, and speeches before 2010
+        speech.hex = hexMaps[speech.map].names[plainName(speech.seat)] ?? null;
+        if (speech.hex === null) notFound.add(speech.seat);
+      }
+      if (notFound.size > 0) {
+        // Seats that Parliament names differently from the map. Shows in the browser's console.
+        console.warn("Seats not found on the map:", [...notFound]);
+      }
+    }
+
+    // Group one map's speeches by the constituency the speaker represented at the time
+    function groupBySeat(speeches, era) {
       const seats = {};
       for (const speech of speeches) {
-        if (speech.seat === null) continue;   // peers, and speeches before July 2024
-        if (!(speech.seat in seats)) {
-          seats[speech.seat] = { speeches: [], mps: [] };
+        if (speech.map !== era || speech.hex === null) continue;
+        const name = speech.hex;
+        if (!(name in seats)) {
+          seats[name] = { speeches: [], mps: [] };
         }
-        seats[speech.seat].speeches.push(speech);
-        if (!seats[speech.seat].mps.includes(speech.MemberName)) {
-          seats[speech.seat].mps.push(speech.MemberName);
+        seats[name].speeches.push(speech);
+        if (!seats[name].mps.includes(speech.MemberName)) {
+          seats[name].mps.push(speech.MemberName);
         }
       }
       // Colour each seat by the party of its most recent speech
@@ -820,7 +889,7 @@ document.getElementById("word").value = placeholders[random];
 
       const saidCount = Object.keys(seatData).length;
       document.getElementById("hexmap").innerHTML =
-        `<svg viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" role="img" aria-label="Hex map of the 650 constituencies. ${saidCount} are filled in because their MP used the phrase. The list alongside gives the top seats.">${shapes}</svg>`;
+        `<svg viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" role="img" aria-label="Hex map of the ${all.length} constituencies${MAPS[shownMap].which}. ${saidCount} are filled in because their MP used the phrase. The list alongside gives the top seats.">${shapes}</svg>`;
 
       // Bring the picked seat to the front so its outline isn't hidden by its neighbours
       const picked = document.querySelector("#hexmap polygon.picked");
@@ -866,14 +935,17 @@ document.getElementById("word").value = placeholders[random];
 
     // Say which speeches aren't on the map, and why
     function drawMapNote(speeches) {
-      const peers = speeches.filter((s) => s.House === "Lords").length;
-      const beforeElection = speeches.filter((s) => s.House === "Commons" && s.seat === null && s.SittingDate < "2024-07-04").length;
-      const unmatched = speeches.filter((s) => s.House === "Commons" && s.seat === null && s.SittingDate >= "2024-07-04").length;
+      const commons = speeches.filter((s) => s.House === "Commons");
+      const peers = speeches.length - commons.length;
+      const otherMap = commons.filter((s) => s.map !== shownMap && s.hex !== null);
+      const before2010 = commons.filter((s) => s.map === null).length;
+      const unmatched = commons.filter((s) => s.map !== null && s.hex === null).length;
       const parts = [];
+      if (otherMap.length > 0) parts.push(`${otherMap.length} from ${MAPS[otherMap[0].map].when}, on the other map`);
       if (peers > 0) parts.push(`${peers} by peers, who don’t have constituencies`);
-      if (beforeElection > 0) parts.push(`${beforeElection} from before the July 2024 election, when the seats had different boundaries`);
+      if (before2010 > 0) parts.push(`${before2010} from before the 2010 election, which neither map covers`);
       if (unmatched > 0) parts.push(`${unmatched} whose speaker couldn’t be matched to a seat`);
-      document.getElementById("map-note").textContent = parts.length > 0 ? "Not on the map: " + parts.join("; ") + "." : "";
+      document.getElementById("map-note").textContent = parts.length > 0 ? "Not on this map: " + parts.join("; ") + "." : "";
     }
 
     // Open (or close) the list of speeches for one seat
@@ -902,14 +974,45 @@ document.getElementById("word").value = placeholders[random];
     }
 
     async function showMap(speeches) {
-      await loadHexes();
-      seatData = groupBySeat(speeches);
+      // Which maps this search needs: one, or both if it spans the July 2024 election
+      const needed = [];
+      for (const era in MAPS) {
+        if (speeches.some((s) => s.House === "Commons" && s.map === era)) needed.push(era);
+      }
+      const first = needed[0] ?? "current";   // the newest map with speeches on it
+      await loadHexes(first);
+      for (const era of needed) await loadHexes(era);
+
+      mapSpeeches = speeches;
+      findHexes(speeches);
+
+      // The switch between the two maps only appears when both have speeches
+      const toggle = document.getElementById("era-toggle");
+      toggle.hidden = needed.length < 2;
+      for (const button of toggle.querySelectorAll("button")) {
+        const era = button.dataset.map;
+        const n = speeches.filter((s) => s.map === era && s.hex !== null).length;
+        button.textContent = MAPS[era].label + " (" + n + ")";
+      }
+
+      pickMap(first);
+      document.getElementById("map-section").hidden = false;
+    }
+
+    // Put one of the two maps on screen
+    function pickMap(era) {
+      shownMap = era;
+      hexes = hexMaps[era].hexes;
+      seatData = groupBySeat(mapSpeeches, era);
       pickedSeat = null;
       document.getElementById("seat-details").innerHTML = "";
+      document.getElementById("map-which").textContent = MAPS[era].which;
+      for (const button of document.querySelectorAll("#era-toggle button")) {
+        button.setAttribute("aria-pressed", button.dataset.map === era ? "true" : "false");
+      }
       drawMap();
       drawTopSeats();
-      drawMapNote(speeches);
-      document.getElementById("map-section").hidden = false;
+      drawMapNote(mapSpeeches);
     }
 
     // Hovering over a hexagon
@@ -954,12 +1057,18 @@ document.getElementById("word").value = placeholders[random];
       if (button !== null) showSeat(button.dataset.seat);
     });
 
+    // The 2010–2024 / since 2024 switch
+    document.getElementById("era-toggle").addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (button !== null) pickMap(button.dataset.map);
+    });
+
     // The By party / By how often switch
-    document.querySelector(".toggle").addEventListener("click", (event) => {
+    document.getElementById("view-toggle").addEventListener("click", (event) => {
       const button = event.target.closest("button");
       if (button === null) return;
       mapView = button.dataset.view;
-      for (const b of document.querySelectorAll(".toggle button")) {
+      for (const b of document.querySelectorAll("#view-toggle button")) {
         b.setAttribute("aria-pressed", b === button ? "true" : "false");
       }
       drawMap();

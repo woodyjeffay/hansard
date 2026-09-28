@@ -1,6 +1,7 @@
 // A tiny web server. Its jobs:
-// 1. Sends parties.html to your browser at http://localhost:3000,
-//    and map.hexjson.json (the constituency hex map) when the page asks for it
+// 1. Sends parties.html to your browser at http://localhost:3000, and the
+//    constituency hex maps when the page asks for them: map.hexjson.json
+//    (seats since 2024) and map-2010.hexjson.json (seats from 2010 to 2024)
 // 2. Passes /api/speeches requests on to Parliament and hands back the answer.
 // 3. Passes /api/member?id=4520 on to Parliament's Members API, which knows
 //    every member's party history.
@@ -42,9 +43,9 @@ async function handle(request, response) {
     const page = fs.readFileSync(here("parties.html"));
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(page);
-  } else if (address.pathname === "/map.hexjson.json") {
-    // The hex map of the 650 constituencies
-    const map = fs.readFileSync(here("map.hexjson.json"));
+  } else if (address.pathname === "/map.hexjson.json" || address.pathname === "/map-2010.hexjson.json") {
+    // The hex maps of the 650 constituencies
+    const map = fs.readFileSync(here(address.pathname.slice(1)));
     response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     response.end(map);
   } else if (address.pathname === "/api/speeches") {
