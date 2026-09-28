@@ -264,6 +264,7 @@ document.getElementById("word").value = placeholders[random];
     </section>
 
     <footer>
+      <p>Got feedback? Email me <a href="mailto:woodylcj@gmail.com">here</a>.</p>
       <p>Data: speeches from <a href="https://hansard.parliament.uk" target="_blank" rel="noopener">Hansard</a>, via the <a href="https://hansard-api.parliament.uk" target="_blank" rel="noopener">Hansard API</a>; parties and constituencies from the <a href="https://members-api.parliament.uk" target="_blank" rel="noopener">UK Parliament Members API</a>; constituency hex maps from <a href="https://open-innovations.org/projects/hexmaps/" target="_blank" rel="noopener">Open Innovations</a>. Contains Parliamentary information licensed under the <a href="https://www.parliament.uk/site-information/copyright-parliament/open-parliament-licence/" target="_blank" rel="noopener">Open Parliament Licence v3.0</a>.</p>
       <p>This programme was made with the assistance of <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a>.</p>
     </footer>
@@ -1127,7 +1128,7 @@ document.getElementById("word").value = placeholders[random];
         const where = house === "" ? "Parliament" : "the " + house;
         let message = speeches.length + " speeches in " + where + " say “" + word + "”.";
         if (dropped > 0) {
-          message += " (" + dropped + " more had the words, but not together, so they’re left out.)";
+          message += " (" + dropped + " more included the words but not together, so they’re left out.)";
         }
         setStatus(message + " Click a month to read them.");
 
@@ -1136,7 +1137,7 @@ document.getElementById("word").value = placeholders[random];
           await showMap(speeches, start, end);
         } catch (error) {
           document.getElementById("map-section").hidden = true;
-          setStatus(message + " Click a month to read them. (The map didn’t load: " + error.message + ".)");
+          setStatus(message + " Click on a month to read them. (The map didn’t load: " + error.message + ".)");
         }
       } catch (error) {
         setStatus("Something went wrong: " + error.message);
