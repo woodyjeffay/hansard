@@ -318,7 +318,7 @@ document.getElementById("word").value = placeholders[random];
         const response = await ask(url + "?" + settings);
         if (response.status === 500) {
           // Parliament's search gives up after about 30 seconds on very common words
-          throw new Error("Parliament’s search gave up. The words are probably too common (like “your” and “party”). Try a more distinctive phrase or a shorter date range.");
+          throw new Error("Parliament’s search gave up. The phrase may be too common. Try a more distinctive phrase or a shorter date range.");
         }
         if (!response.ok) {
           throw new Error("the server replied " + response.status);
@@ -981,7 +981,7 @@ document.getElementById("word").value = placeholders[random];
 
       button.disabled = true;
       try {
-        setStatus("Searching Hansard… (common words can take up to 30 seconds)");
+        setStatus("Searching Hansard… (more common words can take a little while)");
         const found = await getSpeeches(word, start, end, house);
         latestPattern = makePattern(word);
         const speeches = keepExactMatches(found, latestPattern);
