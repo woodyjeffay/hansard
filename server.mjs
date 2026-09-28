@@ -87,10 +87,6 @@ const server = http.createServer(async (request, response) => {
     response.end(JSON.stringify({ error: error.message }));
   }
 });
-
-server.listen(3000, () => {
-  console.log("Running. Open http://localhost:3000 in your browser. Ctrl+C to stop.");
-});
    const PORT = process.env.PORT || 3000;
    server.listen(PORT, () => {
      console.log("Running on port " + PORT);
