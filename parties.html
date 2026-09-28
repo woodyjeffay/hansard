@@ -152,6 +152,7 @@
     .toggles { display: flex; flex-wrap: wrap; gap: 8px; }
     .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
     .toggle[hidden] { display: none; }
+    #map-range:empty { display: none; }
     .toggle button { background: var(--surface); color: var(--muted); border: none; border-radius: 0; font-weight: 400; padding: 6px 12px; }
     .toggle button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
     .map-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); gap: 24px; align-items: start; }
@@ -234,7 +235,9 @@ document.getElementById("word").value = placeholders[random];
 
     <section id="map-section" hidden>
       <h2>Where it was said</h2>
-      <p class="lede">Each hexagon is one constituency<span id="map-which"></span>, all drawn the same size. A seat is filled in if its MP used the phrase.</p>
+      <p class="lede" id="map-lede">Each hexagon is one constituency<span id="map-which"></span>, all drawn the same size. A seat is filled in if its MP used the phrase.</p>
+      <p class="lede" id="map-range"></p>
+      <div id="map-body">
       <div class="map-top">
         <div id="map-key"></div>
         <div class="toggles">
@@ -257,6 +260,7 @@ document.getElementById("word").value = placeholders[random];
         </div>
       </div>
       <div id="seat-details"></div>
+      </div>
     </section>
 
     <footer>
@@ -810,7 +814,7 @@ document.getElementById("word").value = placeholders[random];
       for (const speech of speeches) {
         speech.hex = null;
         if (speech.seat === null || speech.map === null) continue;   // peers, and speeches before 2010
-        speech.hex = hexMaps[speech.map].names[plainName(speech.seat)] ?? null;
+        speech.hex = hexMaps[speech.map]?.names[plainName(speech.seat)] ?? null;
         if (speech.hex === null) notFound.add(speech.seat);
       }
       if (notFound.size > 0) {
@@ -943,7 +947,7 @@ document.getElementById("word").value = placeholders[random];
       const parts = [];
       if (otherMap.length > 0) parts.push(`${otherMap.length} from ${MAPS[otherMap[0].map].when}, on the other map`);
       if (peers > 0) parts.push(`${peers} by peers, who don’t have constituencies`);
-      if (before2010 > 0) parts.push(`${before2010} from before the 2010 election, which neither map covers`);
+      if (before2010 > 0) parts.push(`${before2010} from before the May 2010 election`);
       if (unmatched > 0) parts.push(`${unmatched} whose speaker couldn’t be matched to a seat`);
       document.getElementById("map-note").textContent = parts.length > 0 ? "Not on this map: " + parts.join("; ") + "." : "";
     }
@@ -973,20 +977,43 @@ document.getElementById("word").value = placeholders[random];
       }
     }
 
-    async function showMap(speeches) {
-      // Which maps this search needs: one, or both if it spans the July 2024 election
+    async function showMap(speeches, start, end) {
+      const range = document.getElementById("map-range");
+
+      // Dates entirely before 2010: neither map covers them, so show no map
+      const noMap = end < MAPS.old.from;
+      document.getElementById("map-lede").hidden = noMap;
+      document.getElementById("map-body").hidden = noMap;
+      if (noMap) {
+        range.textContent = "The map only goes back to the May 2010 election, so it can’t show these dates. I’m working on extending it further back.";
+        document.getElementById("map-section").hidden = false;
+        return;
+      }
+
+      // Which maps the dates cover: one, or both if they span the July 2024 election
       const needed = [];
       for (const era in MAPS) {
-        if (speeches.some((s) => s.House === "Commons" && s.map === era)) needed.push(era);
+        if (start < MAPS[era].to && end >= MAPS[era].from) needed.push(era);
       }
-      const first = needed[0] ?? "current";   // the newest map with speeches on it
-      await loadHexes(first);
       for (const era of needed) await loadHexes(era);
 
       mapSpeeches = speeches;
       findHexes(speeches);
 
-      // The switch between the two maps only appears when both have speeches
+      // Explain which dates the map leaves out
+      const notes = [];
+      if (start < MAPS.old.from) {
+        notes.push("Speeches from before the May 2010 election aren’t on the map.");
+      }
+      if (needed.length > 1) {
+        notes.push("The seats were redrawn at the July 2024 election, so speeches before and after it are on separate maps. Use the switch to move between them.");
+      }
+      range.textContent = notes.join(" ");
+
+      // Start on the newest map with speeches on it
+      const first = needed.find((era) => speeches.some((s) => s.map === era && s.hex !== null)) ?? needed[0];
+
+      // The switch between the two maps appears when the dates span the July 2024 election
       const toggle = document.getElementById("era-toggle");
       toggle.hidden = needed.length < 2;
       for (const button of toggle.querySelectorAll("button")) {
@@ -1106,7 +1133,7 @@ document.getElementById("word").value = placeholders[random];
 
         // The map is extra: if it can't load, keep the chart and say why
         try {
-          await showMap(speeches);
+          await showMap(speeches, start, end);
         } catch (error) {
           document.getElementById("map-section").hidden = true;
           setStatus(message + " Click a month to read them. (The map didn’t load: " + error.message + ".)");
