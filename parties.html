@@ -348,18 +348,23 @@ document.getElementById("word").value = placeholders[random];
       return speeches;
     }
 
-    // --- 1b. Keep only speeches with the exact phrase ------------------------
+    // --- 1b. Keep only speeches with the phrase ------------------------------
     //
     // Parliament's search matches the words anywhere in a speech, so
     // "grey belt" also finds "grey water ... green belt". This keeps only
     // speeches where the words appear together, in order. A hyphen counts
     // as a space, so "grey-belt" is kept too.
+    //
+    // The phrase can also sit inside longer words, so "wind farm" finds
+    // "wind farms" and "migration reform" finds "immigration reform".
 
-    // Turn "grey belt" into the pattern: grey, then spaces or hyphens, then belt
+    // Turn "wind farm" into the pattern: any letters, then wind, then spaces
+    // or hyphens, then farm, then any letters. Taking in the extra letters
+    // means the whole of "wind farms" gets highlighted, not just "wind farm".
     function makePattern(phrase) {
       const words = phrase.trim().split(/\s+/);
       const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-      return new RegExp("\\b" + escaped.join("[\\s\\-]+") + "\\b", "i");
+      return new RegExp("\\p{L}*" + escaped.join("[\\s\\-]+") + "\\p{L}*", "iu");
     }
 
     // The speech text comes with bits of HTML in it. This turns it into
