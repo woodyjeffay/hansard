@@ -67,8 +67,7 @@ const COUNT_BANDS = [[1, "1"], [2, "2"], [3, "3–5"], [6, "6–10"], [11, "11+"
 const SAMPLE_PHRASES = [
   "nuclear submarine", "grey belt", "brexit", "electoral reform", "dodgy dave",
   "hs2", "number ten north", "gaza", "ukraine", "donald trump", "small boats",
-  "child poverty", "harry and meghan", "immigration reform", "elon musk",
-  "video assistant referee", "iran war", "cost of living", "green energy", "wind farm",
+  "child poverty", "immigration reform", "elon musk", "fisheries", "iran war", "cost of living", "green energy", "wind farm", "asylum hotels",
 ];
 
 // Parliament stops a search at 2,000 speeches, 100 at a time
