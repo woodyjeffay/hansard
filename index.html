@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parliamentary Word Watch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>Parliamentary Word Watch</h1>
+    <p class="lede">Who in Parliament is saying it, month by month, by party.</p>
+
+    <!-- The search. script.js fills in a sample phrase and the last year's dates. -->
+    <form id="search">
+      <label>Word or phrase <input id="word"></label>
+      <label>From <input id="start" type="date"></label>
+      <label>To <input id="end" type="date"></label>
+      <label>House
+        <select id="house">
+          <option value="">Both</option>
+          <option value="Commons">Commons</option>
+          <option value="Lords">Lords</option>
+        </select>
+      </label>
+      <button>Chart it</button>
+    </form>
+
+    <!-- The chart: one bar per month, split by party -->
+    <p id="status"></p>
+    <div id="key"></div>
+    <div id="chart"></div>
+
+    <!-- The map: which MPs' constituencies said it -->
+    <section id="map-section" hidden>
+      <h2>Where it was said</h2>
+      <p class="lede" id="map-lede">Each hexagon is one constituency<span id="map-which"></span>, all drawn the same size. A seat is filled in if its MP used the phrase.</p>
+      <p class="lede" id="map-range"></p>
+      <div id="map-body">
+        <div class="map-top">
+          <div id="map-key"></div>
+          <div class="toggles">
+            <div class="toggle" id="era-toggle" role="group" aria-label="Which seats" hidden>
+              <button type="button" data-map="old" aria-pressed="false">2010–2024 seats</button>
+              <button type="button" data-map="current" aria-pressed="true">Seats since 2024</button>
+            </div>
+            <div class="toggle" id="view-toggle" role="group" aria-label="Colour the map by">
+              <button type="button" data-view="party" aria-pressed="true">By party</button>
+              <button type="button" data-view="count" aria-pressed="false">By how often</button>
+            </div>
+          </div>
+        </div>
+        <div class="map-layout">
+          <div id="hexmap"></div>
+          <div class="top-seats">
+            <h3>Seats whose MPs said it most</h3>
+            <ol id="top-seats"></ol>
+            <p class="map-note" id="map-note"></p>
+          </div>
+        </div>
+        <div id="seat-details"></div>
+      </div>
+    </section>
+
+    <footer>
+      <p>Got feedback? Email me <a href="mailto:woodylcj@gmail.com">here</a>.</p>
+      <p>Data: speeches from <a href="https://hansard.parliament.uk" target="_blank" rel="noopener">Hansard</a>, via the <a href="https://hansard-api.parliament.uk" target="_blank" rel="noopener">Hansard API</a>; parties and constituencies from the <a href="https://members-api.parliament.uk" target="_blank" rel="noopener">UK Parliament Members API</a>; constituency hex maps from <a href="https://open-innovations.org/projects/hexmaps/" target="_blank" rel="noopener">Open Innovations</a>. Contains Parliamentary information licensed under the <a href="https://www.parliament.uk/site-information/copyright-parliament/open-parliament-licence/" target="_blank" rel="noopener">Open Parliament Licence v3.0</a>.</p>
+      <p>This programme was made with the assistance of <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a>.</p>
+    </footer>
+  </main>
+
+  <div id="tooltip"></div>
+</body>
+</html>

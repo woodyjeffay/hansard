@@ -1,6 +1,11 @@
-  {
-     "name": "hansard-word-watch",
-     "type": "module",
-     "scripts": { "start": "node server.mjs" },
-     "engines": { "node": ">=18" }
-   }
+{
+  "name": "hansard-word-watch",
+  "description": "Chart who in Parliament is saying a word or phrase, month by month, by party",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

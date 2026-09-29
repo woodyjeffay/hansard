@@ -1,0 +1,177 @@
+/* Parliamentary Word Watch */
+
+/* ---- Colours, light and dark ---- */
+:root {
+  --surface: #fcfcfb;
+  --panel: #ffffff;
+  --border: #e3e2de;
+  --text: #0b0b0b;
+  --muted: #52514e;
+  --faint: #efeeea;
+  --accent: #2a78d6;
+  --mark: #fff1a8;
+  /* The map: a seat whose MP didn't say it, then five shades for "how often" */
+  --zero: #eeede9;
+  --r1: #b0aea8; --r2: #8c8a84; --r3: #68665f; --r4: #45443f; --r5: #1c1c1a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1a1a19;
+    --panel: #232322;
+    --border: #3a3a38;
+    --text: #ffffff;
+    --muted: #c3c2b7;
+    --faint: #2c2c2a;
+    --accent: #3987e5;
+    --mark: #5c4d00;
+    --zero: #2b2b29;
+    --r1: #66655f; --r2: #8a8882; --r3: #adaba5; --r4: #d0cec8; --r5: #f6f5f1;
+  }
+}
+
+/* ---- The page ---- */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: 17px/1.5 "EB Garamond", Georgia, serif;
+}
+main { max-width: 960px; margin: 0 auto; padding: 32px 16px; }
+h1 { margin: 0 0 4px; }
+.lede { margin: 0 0 20px; color: var(--muted); }
+.lede:empty { display: none; }
+
+/* ---- The search form ---- */
+form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+input, select, button {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+input, select { width: 100%; min-width: 0; }
+button { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+button:disabled { opacity: 0.6; cursor: wait; }
+
+/* ---- The chart: one row per month ---- */
+#status { min-height: 1.5em; margin: 16px 0; color: var(--muted); }
+
+#key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 12px; font-size: 0.85rem; color: var(--muted); }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+.row {
+  display: grid;
+  grid-template-columns: 72px 1fr 40px;
+  gap: 10px;
+  align-items: center;
+  padding: 2px 4px;
+  margin: 0 -4px 2px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.row.clickable { cursor: pointer; }
+.row.clickable:hover, .row.open { background: var(--faint); }
+.row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.month { color: var(--muted); font-variant-numeric: tabular-nums; }
+.total { text-align: right; font-variant-numeric: tabular-nums; }
+.row.empty .total { color: var(--muted); }
+.bar { display: flex; gap: 2px; height: 18px; }
+.segment { height: 100%; }
+.segment:first-child { border-radius: 4px 0 0 4px; }
+.segment:last-child { border-radius: 0 4px 4px 0; }
+.segment:only-child { border-radius: 4px; }
+/* An empty month: a faint line, so the gap is visible rather than missing */
+.bar.none { height: 2px; background: var(--border); border-radius: 1px; }
+
+/* Hover: fade the other parties in the row so the one under the mouse stands out */
+.bar:hover .segment { opacity: 0.45; }
+.bar:hover .segment:hover { opacity: 1; }
+
+/* ---- The tooltip, shared by the chart and the map ---- */
+#tooltip {
+  position: fixed;
+  display: none;
+  min-width: 160px;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font-size: 0.85rem;
+  pointer-events: none;
+  z-index: 10;
+}
+#tooltip .tip-month { font-weight: 600; margin-bottom: 4px; }
+#tooltip .tip-row { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); }
+#tooltip .tip-row.current { color: var(--text); font-weight: 600; }
+#tooltip .tip-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; display: flex; justify-content: space-between; }
+#tooltip .tip-hint { margin-top: 4px; font-size: 0.75rem; color: var(--muted); }
+
+/* ---- The list of speeches under a month or a seat ---- */
+.details {
+  margin: 4px 0 12px;
+  padding: 4px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.details h2 { font-size: 1rem; margin: 12px 0 4px; }
+.speech { padding: 12px 0; border-top: 1px solid var(--border); }
+.speech:first-of-type { border-top: none; }
+.who { font-weight: 600; }
+.meta { font-size: 0.85rem; color: var(--muted); }
+.quote { margin: 6px 0; }
+.quote mark { background: var(--mark); color: inherit; padding: 0 2px; border-radius: 2px; }
+.link { font-size: 0.85rem; color: var(--accent); }
+.link.waiting { color: var(--muted); }
+
+/* ---- The constituency map ---- */
+#map-section { margin-top: 40px; }
+#map-section > h2 { margin: 0 0 4px; font-size: 1.4rem; }
+.map-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin: 8px 0 12px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+.toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.toggle[hidden] { display: none; }
+.toggle button { background: var(--surface); color: var(--muted); border: none; border-radius: 0; font-weight: 400; padding: 6px 12px; }
+.toggle button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+.map-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); gap: 24px; align-items: start; }
+@media (max-width: 720px) { .map-layout { grid-template-columns: 1fr; } }
+#hexmap svg { width: 100%; height: auto; max-height: 760px; display: block; }
+#hexmap polygon { stroke: var(--surface); stroke-width: 1; }
+#hexmap polygon.zero { fill: var(--zero); }
+#hexmap polygon.r1 { fill: var(--r1); } #hexmap polygon.r2 { fill: var(--r2); }
+#hexmap polygon.r3 { fill: var(--r3); } #hexmap polygon.r4 { fill: var(--r4); }
+#hexmap polygon.r5 { fill: var(--r5); }
+#hexmap polygon.said { cursor: pointer; }
+#hexmap polygon.said:hover, #hexmap polygon.picked { stroke: var(--text); stroke-width: 2; }
+#map-key { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; }
+.map-note { font-size: 0.85rem; color: var(--muted); margin: 8px 0 0; }
+.top-seats h3 { font-size: 1rem; margin: 0 0 6px; }
+.top-seats ol { margin: 0; padding: 0; list-style: none; }
+.top-seats li button {
+  width: 100%; display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center;
+  text-align: left; background: none; border: none; border-radius: 6px; color: var(--text);
+  font-weight: 400; padding: 5px 6px; cursor: pointer;
+}
+.top-seats li button:hover, .top-seats li button.picked { background: var(--faint); }
+.top-seats .seat-name { line-height: 1.25; }
+.top-seats .seat-mp { display: block; font-size: 0.8rem; color: var(--muted); }
+.top-seats .seat-count { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* ---- Credits at the foot of the page ---- */
+footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
+footer p { margin: 0 0 6px; }
+footer a { color: var(--accent); }
