@@ -2,6 +2,10 @@
 
 Chart who in Parliament is saying a word or phrase, month by month and by party, and map which MPs’ constituencies said it.
 
+## Try it
+
+Try it [here](https://parliamentary-word-watch.onrender.com/).
+
 ## Run it
 
 You need [Node.js](https://nodejs.org) 18 or later. In this folder:
