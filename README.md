@@ -1,6 +1,6 @@
 # Parliamentary Word Watch
 
-Chart who in Parliament is saying a word or phrase, month by month and by party, and map which MPs’ constituencies said it.
+Chart who in Parliament is saying a word or phrase, week by week or month by month, see how it splits by party, and map which MPs’ constituencies said it.
 
 ## Try it
 
@@ -18,7 +18,7 @@ Then open http://localhost:3000.
 
 ## How it works
 
-A search finds every speech in Hansard containing the words, keeps those where they appear together, and looks up each speaker’s party and seat on the day they spoke. It then charts the speeches by month and maps them by constituency.
+A search finds every speech in Hansard containing the words, keeps those where they appear together, and looks up each speaker’s party and seat on the day they spoke. It then charts the speeches by week or month, breaks them down by party, and maps them by constituency.
 
 | File | What it does |
 | --- | --- |

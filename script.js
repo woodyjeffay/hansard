@@ -4,7 +4,8 @@
 //   1. getSpeeches   asks Hansard for every speech containing the words
 //   2. keepMatches   keeps only those where the words appear together
 //   3. getHistories  looks up each speaker's parties and seats, with dates
-//   4. drawChart     draws one bar per month, split by party
+//   4. drawChart     draws one bar per week or month, and drawParties
+//                    shows how many came from each party
 //   5. showMap       puts each MP's speeches on a map of constituencies
 //
 // The browser isn't allowed to ask Parliament directly, so every request
@@ -13,16 +14,16 @@
 
 // --- Settings ----------------------------------------------------------------
 
-// Party colours. Anything not listed counts as Other.
+// Party colours, softened to sit with the page's greens. Anything not listed counts as Other.
 const COLOURS = {
-  Con:    "#0087dc",
-  Lab:    "#e4003b",
-  LD:     "#faa61a",
-  SNP:    "#e6c800",
-  Reform: "#12b6cf",
-  Green:  "#02a95b",
-  CB:     "#8e6bbf",
-  Other:  "#9a9a96",
+  Con:    "#5375a1",
+  Lab:    "#b14943",
+  LD:     "#d69a39",
+  SNP:    "#a79d4d",
+  Reform: "#4f9aa6",
+  Green:  "#5f9a6a",
+  CB:     "#8a76a8",
+  Other:  "#8c9a90",
 };
 
 // Party names as the Members API gives them, and the short labels we use.
@@ -268,24 +269,71 @@ function getMap(date) {
 }
 
 
-// --- 4. Sort the speeches into months ----------------------------------------
+// --- 4. Sort the speeches into weeks or months -------------------------------
 
-// { "2024-12": [speech, speech, ...], "2025-01": [...] }
-// Each speech also gets a .party, .seat and .map, so we only work them out once.
-function groupByMonth(speeches) {
-  const months = {};
+// Give each speech a .party, .seat and .map, so we only work them out once
+function describe(speeches) {
   for (const speech of speeches) {
     const date = speech.SittingDate.slice(0, 10);
     speech.party = getParty(speech.MemberId, date);
     speech.seat = getSeat(speech.MemberId, date);
     speech.map = getMap(date);
-    const month = date.slice(0, 7);
-    if (!(month in months)) {
-      months[month] = [];
-    }
-    months[month].push(speech);
   }
-  return months;
+}
+
+// A date as a number of days, so weeks can be counted without the clocks
+// changing getting in the way
+function dayNumber(date) {
+  return Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) / 86400000;
+}
+function fromDayNumber(n) {
+  return new Date(n * 86400000).toISOString().slice(0, 10);
+}
+
+// Which week or month a date falls in. Weeks are named by their Monday:
+// periodOf("2025-02-13", "week") -> "2025-02-10"; periodOf("2025-02-13", "month") -> "2025-02"
+function periodOf(date, kind) {
+  if (kind === "month") return date.slice(0, 7);
+  const day = dayNumber(date);
+  const sinceMonday = (new Date(day * 86400000).getUTCDay() + 6) % 7;
+  return fromDayNumber(day - sinceMonday);
+}
+
+// Every week or month from start to end, including the ones nobody spoke in
+function periodRange(start, end, kind) {
+  const periods = [];
+  if (kind === "week") {
+    for (let day = dayNumber(periodOf(start, "week")); day <= dayNumber(end); day = day + 7) {
+      periods.push(fromDayNumber(day));
+    }
+    return periods;
+  }
+  let year = Number(start.slice(0, 4));
+  let month = Number(start.slice(5, 7));
+  const endYear = Number(end.slice(0, 4));
+  const endMonth = Number(end.slice(5, 7));
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    periods.push(year + "-" + String(month).padStart(2, "0"));
+    month = month + 1;
+    if (month === 13) {
+      month = 1;
+      year = year + 1;
+    }
+  }
+  return periods;
+}
+
+// { "2025-02-10": [speech, speech, ...], ... }
+function groupByPeriod(speeches, kind) {
+  const groups = {};
+  for (const speech of speeches) {
+    const period = periodOf(speech.SittingDate.slice(0, 10), kind);
+    if (!(period in groups)) {
+      groups[period] = [];
+    }
+    groups[period].push(speech);
+  }
+  return groups;
 }
 
 // How many speeches from each party in a list: { Con: 3, Lab: 5 }
@@ -297,76 +345,228 @@ function countParties(speeches) {
   return counts;
 }
 
-// Every month from start to end, including the ones nobody spoke in.
-// monthRange("2024-11-15", "2025-02-01") -> ["2024-11", "2024-12", "2025-01", "2025-02"]
-function monthRange(start, end) {
-  let year = Number(start.slice(0, 4));
-  let month = Number(start.slice(5, 7));
-  const endYear = Number(end.slice(0, 4));
-  const endMonth = Number(end.slice(5, 7));
-  const months = [];
-  while (year < endYear || (year === endYear && month <= endMonth)) {
-    months.push(year + "-" + String(month).padStart(2, "0"));
-    month = month + 1;
-    if (month === 13) {
-      month = 1;
-      year = year + 1;
-    }
+// A week: "12 Feb", or "the week of 12 February 2025" when long is true.
+// A month: "Feb 2025", or "February 2025" when long is true.
+function periodLabel(period, kind, long = false) {
+  if (kind === "month") {
+    const date = new Date(period + "-01T12:00:00");
+    return date.toLocaleDateString("en-GB", { month: long ? "long" : "short", year: "numeric" });
   }
-  return months;
+  const date = new Date(period + "T12:00:00");
+  if (long) {
+    return "the week of " + date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  }
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-// "2024-12" -> "Dec 2024", or "December 2024" when long is true
-function monthLabel(month, long = false) {
-  const date = new Date(month + "-01T12:00:00");
-  return date.toLocaleDateString("en-GB", { month: long ? "long" : "short", year: "numeric" });
+// "1 mention", "3 mentions"
+function mentionCount(n) {
+  return n + (n === 1 ? " mention" : " mentions");
 }
 
 
 // --- 5. Draw the chart -------------------------------------------------------
 
-let latestMonths = {};   // the latest search's speeches by month, for the tooltip and the lists
+let latestSpeeches = [];   // the latest search's speeches
+let latestWhere = "";      // where they were said: "Parliament", "the Commons" or "the Lords"
+let latestDates = [];      // the search's [start, end]
+let periodKind = "week";   // "week" or "month"
+let periods = [];          // every week or month in the search, in order
+let groups = {};           // the speeches in each of them
+let openPeriod = null;     // the period whose speeches are open, if any
 
-function drawChart(months, allMonths) {
-  latestMonths = months;
-
-  // The key
-  let keyHtml = "";
-  for (const party in COLOURS) {
-    keyHtml += `<span><span class="swatch" style="background:${COLOURS[party]}"></span>${party}</span>`;
+// A round number for the gap between gridlines, so the top line sits just above the biggest bar
+function niceStep(biggest) {
+  const rough = Math.max(biggest, 1) / 3;
+  const power = 10 ** Math.floor(Math.log10(rough));
+  for (const m of [1, 2, 2.5, 5, 10]) {
+    if (m * power >= rough && Number.isInteger(m * power)) return m * power;
   }
-  document.getElementById("key").innerHTML = keyHtml;
+  return 10 * power;
+}
 
-  // The busiest month sets the full width; every other bar is scaled to it.
-  const biggest = Math.max(0, ...Object.values(months).map((list) => list.length));
+function drawChart(start, end) {
+  periods = periodRange(start, end, periodKind);
+  groups = groupByPeriod(latestSpeeches, periodKind);
+  openPeriod = null;
+  document.getElementById("period-details").innerHTML = "";
 
-  // One row per month, including empty ones
-  let chartHtml = "";
-  for (const month of allMonths) {
-    const speeches = months[month] ?? [];
-    const counts = countParties(speeches);
-    const total = speeches.length;
+  const counts = periods.map((p) => (groups[p] ?? []).length);
+  const step = niceStep(Math.max(0, ...counts));
+  const top = step * 3;
 
-    if (total === 0) {
-      chartHtml += `<div class="row empty"><span class="month">${monthLabel(month)}</span><div class="bar none"></div><span class="total">0</span></div>`;
-      continue;
-    }
-
-    let segments = "";
-    for (const party in COLOURS) {
-      const n = counts[party] ?? 0;
-      if (n > 0) {
-        const width = (n / biggest) * 100;
-        segments += `<div class="segment" style="width:${width}%; background:${COLOURS[party]}" data-month="${month}" data-party="${party}"></div>`;
-      }
-    }
-    chartHtml += `<div class="row clickable" data-month="${month}" tabindex="0" role="button" aria-expanded="false"><span class="month">${monthLabel(month)}</span><div class="bar">${segments}</div><span class="total">${total}</span></div>`;
+  // Gridlines and their numbers, from 0 at the bottom
+  let axis = "";
+  let lines = "";
+  for (let i = 0; i <= 3; i++) {
+    const bottom = (i / 3) * 100;
+    axis += `<span style="bottom:${bottom}%">${(step * i).toLocaleString("en-GB")}</span>`;
+    lines += `<div class="gridline" style="bottom:${bottom}%"></div>`;
   }
-  document.getElementById("chart").innerHTML = chartHtml;
+
+  // One column per period. Thinner gaps when there are lots of them.
+  let columns = "";
+  periods.forEach((period, i) => {
+    const n = counts[i];
+    const label = `${periodLabel(period, periodKind)}: ${mentionCount(n)}`;
+    columns += `<button type="button" class="column" data-period="${period}" aria-label="${label}"${n === 0 ? " disabled" : ` aria-expanded="false"`}><span class="fill" style="height:${(n / top) * 100}%"></span></button>`;
+  });
+  const gap = Math.max(1, Math.min(14, Math.round(160 / periods.length)));
+
+  document.getElementById("chart").innerHTML = `
+    <div class="plot">
+      <div class="y-axis" aria-hidden="true">${axis}</div>
+      <div class="plot-area">
+        ${lines}
+        <div class="columns" style="--gap:${gap}px">${columns}</div>
+        <div class="peak-label" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="x-axis" aria-hidden="true"></div>`;
+
+  // About six dates along the bottom, under the columns they belong to
+  const buttons = [...document.querySelectorAll("#chart .column")];
+  const every = Math.ceil(periods.length / 6);
+  let dates = "";
+  buttons.forEach((button, i) => {
+    if (i % every === 0) {
+      dates += `<span style="left:${button.offsetLeft + button.offsetWidth / 2}px">${periodLabel(periods[i], periodKind)}</span>`;
+    }
+  });
+  document.querySelector("#chart .x-axis").innerHTML = dates;
+
+  highlight(null);
+  drawChange(counts);
+  document.getElementById("trend-sub").textContent =
+    (periodKind === "week" ? "Weekly" : "Monthly") + " mentions in " + latestWhere;
+}
+
+// Pick out one column and label it. With none given, pick the open one, or else the busiest.
+function highlight(period) {
+  const counts = periods.map((p) => (groups[p] ?? []).length);
+  if (period === null) period = openPeriod;
+  if (period === null) {
+    const biggest = Math.max(...counts);
+    if (biggest === 0) period = null;
+    else period = periods[counts.indexOf(biggest)];
+  }
+
+  const label = document.querySelector("#chart .peak-label");
+  for (const button of document.querySelectorAll("#chart .column")) {
+    button.classList.toggle("active", button.dataset.period === period);
+  }
+  if (period === null) {
+    label.style.display = "none";
+    return;
+  }
+
+  const button = document.querySelector(`#chart .column[data-period="${period}"]`);
+  const fill = button.querySelector(".fill");
+  const area = document.querySelector("#chart .plot-area");
+  label.style.display = "block";
+  label.textContent = `${periodLabel(period, periodKind)} · ${mentionCount((groups[period] ?? []).length)}`;
+  label.style.top = (area.offsetHeight - fill.offsetHeight) + "px";
+
+  // Centre it over the column, but keep it inside the chart
+  const half = label.offsetWidth / 2;
+  const centre = button.offsetLeft + button.offsetWidth / 2;
+  label.style.left = Math.min(Math.max(centre, half), area.offsetWidth - half) + "px";
+}
+
+// Compare the second half of the search with the first:
+// "↑ 18.6% more mentions than the previous 26 weeks"
+function drawChange(counts) {
+  const change = document.getElementById("change");
+  const half = Math.floor(counts.length / 2);
+  const sum = (list) => list.reduce((a, b) => a + b, 0);
+  const before = sum(counts.slice(counts.length - 2 * half, counts.length - half));
+  const after = sum(counts.slice(counts.length - half));
+  const span = half + " " + periodKind + (half === 1 ? "" : "s");
+
+  if (half === 0 || before === 0) {
+    change.textContent = "";
+  } else if (after === before) {
+    change.textContent = `→ As many mentions in the last ${span} as the ${span} before`;
+  } else {
+    const percent = Math.abs((after - before) / before * 100).toFixed(1);
+    change.textContent = after > before
+      ? `↑ ${percent}% more mentions in the last ${span} than the ${span} before`
+      : `↓ ${percent}% fewer mentions in the last ${span} than the ${span} before`;
+  }
+}
+
+const chart = document.getElementById("chart");
+
+// Over a column: label it instead of the busiest
+chart.addEventListener("mouseover", (event) => {
+  const button = event.target.closest(".column:not(:disabled)");
+  if (button !== null) highlight(button.dataset.period);
+});
+chart.addEventListener("mouseleave", () => highlight(null));
+chart.addEventListener("focusin", (event) => {
+  const button = event.target.closest(".column");
+  if (button !== null) highlight(button.dataset.period);
+});
+chart.addEventListener("focusout", () => highlight(null));
+
+// Switching between weeks and months
+document.getElementById("period").addEventListener("change", (event) => {
+  periodKind = event.target.value;
+  drawChart(...latestDates);
+});
+
+// The columns are positioned in pixels, so redraw them when the window changes size
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (periods.length === 0) return;
+    const wasOpen = openPeriod;
+    drawChart(...latestDates);
+    if (wasOpen !== null) togglePeriod(wasOpen);
+  }, 150);
+});
+
+
+// --- 6. Who's using it: one row per party ------------------------------------
+
+// Party names to show in the table
+const PARTY_NAMES = {
+  Lab: "Labour",
+  Con: "Conservative",
+  LD: "Liberal Democrat",
+  SNP: "SNP",
+  Reform: "Reform UK",
+  Green: "Green",
+  CB: "Crossbench",
+  Other: "Other parties",
+};
+
+function drawParties(speeches) {
+  const counts = countParties(speeches);
+  const total = speeches.length;
+  // Busiest first, with Other always last
+  const parties = Object.keys(counts).filter((p) => p !== "Other").sort((a, b) => counts[b] - counts[a]);
+  if (counts.Other) parties.push("Other");
+  const biggest = Math.max(0, ...Object.values(counts));
+
+  let html = "";
+  for (const party of parties) {
+    const n = counts[party];
+    html += `
+      <tr>
+        <td class="party"><span class="swatch" style="background:${COLOURS[party]}"></span>${PARTY_NAMES[party]}</td>
+        <td class="meter"><div class="track"><span style="width:${(n / biggest) * 100}%; background:${COLOURS[party]}"></span></div></td>
+        <td class="num">${n.toLocaleString("en-GB")}</td>
+        <td class="num share">${(n / total * 100).toFixed(1)}%</td>
+      </tr>`;
+  }
+  document.querySelector("#party-table tbody").innerHTML =
+    html || `<tr><td colspan="4" class="share">Nobody said it in this period.</td></tr>`;
 }
 
 
-// --- 6. The tooltip ----------------------------------------------------------
+// --- The tooltip, for the map ------------------------------------------------
 
 // Show the tooltip just below-right of the mouse, but keep it on screen
 function placeTooltip(event) {
@@ -386,34 +586,6 @@ function placeTooltip(event) {
 function hideTooltip() {
   tooltip.style.display = "none";
 }
-
-// Over a bar: that month's breakdown by party, with the hovered party picked out
-document.getElementById("chart").addEventListener("mousemove", (event) => {
-  const segment = event.target.closest(".segment");
-  if (segment === null) return hideTooltip();
-
-  const month = segment.dataset.month;
-  const hovered = segment.dataset.party;
-  const counts = countParties(latestMonths[month]);
-
-  let html = `<div class="tip-month">${monthLabel(month, true)}</div>`;
-  let total = 0;
-  for (const party in COLOURS) {
-    const n = counts[party] ?? 0;
-    if (n > 0) {
-      const current = party === hovered ? " current" : "";
-      html += `<div class="tip-row${current}"><span><span class="swatch" style="background:${COLOURS[party]}"></span>${party}</span><span>${n}</span></div>`;
-      total = total + n;
-    }
-  }
-  html += `<div class="tip-total"><span>Total</span><span>${total}</span></div>`;
-  html += `<div class="tip-hint">Click to read the speeches</div>`;
-  tooltip.innerHTML = html;
-  placeTooltip(event);
-});
-
-document.getElementById("chart").addEventListener("mouseleave", hideTooltip);
-
 
 // --- 7. Reading the speeches -------------------------------------------------
 //
@@ -459,7 +631,7 @@ function speechHtml(speech) {
 
 // The list's heading and speeches, oldest first
 function speechListHtml(heading, speeches) {
-  return `<h2>${heading}</h2>` + inOrder(speeches).map(speechHtml).join("");
+  return `<h3>${heading}</h3>` + inOrder(speeches).map(speechHtml).join("");
 }
 
 // Ask Hansard for the web address of each speech in a list, a batch at a time,
@@ -494,44 +666,32 @@ async function fillInLinks(panel, speeches) {
   }
 }
 
-// Open a month's speeches under its bar, or close them if they're already open
-function toggleMonth(row) {
-  const month = row.dataset.month;
-  const alreadyOpen = row.classList.contains("open");
-
-  // Close whatever is open
-  for (const panel of document.querySelectorAll("#chart .details")) panel.remove();
-  for (const open of document.querySelectorAll(".row.open")) {
-    open.classList.remove("open");
-    open.setAttribute("aria-expanded", "false");
+// Open a week's or month's speeches under the chart, or close them if they're already open
+function togglePeriod(period) {
+  const details = document.getElementById("period-details");
+  const alreadyOpen = openPeriod === period;
+  for (const button of document.querySelectorAll("#chart .column[aria-expanded]")) {
+    button.classList.toggle("open", !alreadyOpen && button.dataset.period === period);
+    button.setAttribute("aria-expanded", !alreadyOpen && button.dataset.period === period ? "true" : "false");
   }
-  if (alreadyOpen) return;
+  if (alreadyOpen) {
+    openPeriod = null;
+    details.innerHTML = "";
+    highlight(null);
+    return;
+  }
 
-  const speeches = latestMonths[month];
-  const panel = document.createElement("div");
-  panel.className = "details";
-  panel.innerHTML = speechListHtml(`${monthLabel(month, true)}: ${speechCount(speeches.length)}`, speeches);
-  row.after(panel);
-  row.classList.add("open");
-  row.setAttribute("aria-expanded", "true");
-  fillInLinks(panel, speeches);
+  openPeriod = period;
+  const speeches = groups[period];
+  const heading = `${periodLabel(period, periodKind, true)}: ${speechCount(speeches.length)}`;
+  details.innerHTML = `<div class="details">${speechListHtml(heading.charAt(0).toUpperCase() + heading.slice(1), speeches)}</div>`;
+  highlight(period);
+  fillInLinks(details, speeches);
 }
 
-document.getElementById("chart").addEventListener("click", (event) => {
-  const row = event.target.closest(".row.clickable");
-  if (row !== null) {
-    hideTooltip();
-    toggleMonth(row);
-  }
-});
-
-// Keyboard: Enter or Space on a focused month opens it too
-document.getElementById("chart").addEventListener("keydown", (event) => {
-  const row = event.target.closest(".row.clickable");
-  if (row !== null && (event.key === "Enter" || event.key === " ")) {
-    event.preventDefault();
-    toggleMonth(row);
-  }
+chart.addEventListener("click", (event) => {
+  const button = event.target.closest(".column:not(:disabled)");
+  if (button !== null) togglePeriod(button.dataset.period);
 });
 
 
@@ -878,14 +1038,24 @@ document.getElementById("search").addEventListener("submit", async (event) => {
     const speeches = keepMatches(found, latestPattern);
     const dropped = found.length - speeches.length;
     await getHistories(speeches);
-    drawChart(groupByMonth(speeches), monthRange(start, end));
+    describe(speeches);
+
+    // Weeks for up to six months, months for anything longer. The menu can switch.
+    latestSpeeches = speeches;
+    latestDates = [start, end];
+    latestWhere = house === "" ? "Parliament" : house + " debates";
+    periodKind = dayNumber(end) - dayNumber(start) <= 183 ? "week" : "month";
+    document.getElementById("period").value = periodKind;
+    document.getElementById("results").hidden = false;   // shown first, so the chart can measure itself
+    drawChart(start, end);
+    drawParties(speeches);
 
     const where = house === "" ? "Parliament" : "the " + house;
     let message = speechCount(speeches.length) + " in " + where + (speeches.length === 1 ? " says" : " say") + " “" + word + "”.";
     if (dropped > 0) {
       message += " (" + dropped + " more included the words but not together, so they’re left out.)";
     }
-    message += " Click a month to read them.";
+    message += " Click a bar to read them.";
     setStatus(message);
 
     // The map is extra: if it can't load, keep the chart and say why

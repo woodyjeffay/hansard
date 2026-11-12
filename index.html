@@ -6,18 +6,20 @@
   <title>Parliamentary Word Watch</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="script.js" defer></script>
 </head>
 <body>
   <main>
-    <h1>Parliamentary Word Watch</h1>
-    <p class="lede">Who in Parliament is saying it, month by month, by party.</p>
+    <header class="masthead">
+      <h1>Parliamentary Word Watch</h1>
+      <p class="lede">Who in Parliament is saying it, how often, and which party.</p>
+    </header>
 
     <!-- The search. script.js fills in a sample phrase and the last year's dates. -->
-    <form id="search">
-      <label>Word or phrase <input id="word"></label>
+    <form id="search" class="card">
+      <label class="wide">Word or phrase <input id="word"></label>
       <label>From <input id="start" type="date"></label>
       <label>To <input id="end" type="date"></label>
       <label>House
@@ -30,16 +32,53 @@
       <button>Chart it</button>
     </form>
 
-    <!-- The chart: one bar per month, split by party -->
     <p id="status"></p>
-    <div id="key"></div>
-    <div id="chart"></div>
+
+    <div id="results" class="results" hidden>
+      <!-- The chart: one bar per week or month -->
+      <section class="card" id="trend">
+        <div class="card-head">
+          <div>
+            <h2>How the conversation is changing</h2>
+            <p class="sub" id="trend-sub"></p>
+          </div>
+          <select id="period" class="pill" aria-label="Group speeches">
+            <option value="week">By week</option>
+            <option value="month">By month</option>
+          </select>
+        </div>
+        <div id="chart"></div>
+        <p class="change" id="change"></p>
+        <div id="period-details"></div>
+      </section>
+
+      <!-- Who said it: one row per party -->
+      <section class="card" id="parties">
+        <div class="card-head">
+          <div>
+            <h2>Who’s using it?</h2>
+            <p class="sub">Share of mentions by political party</p>
+          </div>
+        </div>
+        <table id="party-table">
+          <thead>
+            <tr><th scope="col">Party</th><th scope="col"><span class="visually-hidden">Share</span></th><th scope="col" class="num">Mentions</th><th scope="col" class="num">Share</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="note">Shares show volume, not sentiment or party position.</p>
+      </section>
+    </div>
 
     <!-- The map: which MPs' constituencies said it -->
-    <section id="map-section" hidden>
-      <h2>Where it was said</h2>
-      <p class="lede" id="map-lede">Each hexagon is one constituency<span id="map-which"></span>, all drawn the same size. A seat is filled in if its MP used the phrase.</p>
-      <p class="lede" id="map-range"></p>
+    <section id="map-section" class="card" hidden>
+      <div class="card-head">
+        <div>
+          <h2>Where it was said</h2>
+          <p class="sub" id="map-lede">Each hexagon is one constituency<span id="map-which"></span>, all drawn the same size. A seat is filled in if its MP used the phrase.</p>
+          <p class="sub" id="map-range"></p>
+        </div>
+      </div>
       <div id="map-body">
         <div class="map-top">
           <div id="map-key"></div>
@@ -59,7 +98,7 @@
           <div class="top-seats">
             <h3>Seats whose MPs said it most</h3>
             <ol id="top-seats"></ol>
-            <p class="map-note" id="map-note"></p>
+            <p class="note" id="map-note"></p>
           </div>
         </div>
         <div id="seat-details"></div>
