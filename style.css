@@ -66,6 +66,13 @@ input, select { width: 100%; min-width: 0; }
 button { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
 button:disabled { opacity: 0.6; cursor: wait; }
 
+/* ---- Share and download, under the status line ---- */
+#actions:not([hidden]) { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; }
+#actions button { background: var(--panel); color: var(--accent); border-color: var(--border); }
+#actions button:hover { background: var(--faint); }
+#actions button:disabled { cursor: not-allowed; }
+#action-note { margin: 0; font-size: 0.9rem; color: var(--muted); overflow-wrap: anywhere; }
+
 /* ---- The chart: one row per month ---- */
 #status { min-height: 1.5em; margin: 16px 0; color: var(--muted); }
 

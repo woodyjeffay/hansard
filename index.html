@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script src="xlsx.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
@@ -32,6 +33,11 @@
 
     <!-- The chart: one bar per month, split by party -->
     <p id="status"></p>
+    <div id="actions" hidden>
+      <button type="button" id="share">Share this search</button>
+      <button type="button" id="download">Download spreadsheet (.xlsx)</button>
+      <p id="action-note" role="status"></p>
+    </div>
     <div id="key"></div>
     <div id="chart"></div>
 

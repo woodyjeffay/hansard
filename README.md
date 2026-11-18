@@ -16,6 +16,15 @@ npm start
 
 Then open http://localhost:3000.
 
+## Deploy it to Vercel
+
+The project runs on Vercel as it is, with no build step. Import the repository in Vercel (or run `vercel` in this folder) and leave the framework preset as **Other**. Vercel serves the page’s files directly and runs the three files in `api/` as functions. `vercel.json` gives them up to 60 seconds, since Hansard can take a while on common words.
+
+## Share and download
+
+- After a search, **Share this search** copies a link (or opens your phone’s share sheet). The link holds the phrase, dates and House, so whoever opens it sees the same search. The address bar updates with every search too, so you can bookmark it.
+- **Download spreadsheet (.xlsx)** saves one row per speech: title, name, constituency, date, debate, quote, and the committees the speaker sat on that day. The title is the role they spoke in (such as “The Deputy Prime Minister”), or any post they held that day, or else MP or Member of the House of Lords.
+
 ## How it works
 
 A search finds every speech in Hansard containing the words, keeps those where they appear together, and looks up each speaker’s party and seat on the day they spoke. It then charts the speeches by month and maps them by constituency.
@@ -23,13 +32,17 @@ A search finds every speech in Hansard containing the words, keeps those where t
 | File | What it does |
 | --- | --- |
 | `index.html`, `style.css`, `script.js` | The page |
-| `server.mjs` | Serves the page and passes its requests on to Parliament, which browsers can’t call directly |
+| `xlsx.js` | Builds the spreadsheet download in the browser |
+| `lib/parliament.mjs` | Passes the page’s requests on to Parliament, which browsers can’t call directly |
+| `server.mjs` | Runs the site on your own computer |
+| `api/`, `vercel.json` | Run the site on Vercel |
 | `maps/` | Hex maps of the constituencies used from 2010 to 2024, and since 2024 |
 
 ## Limits
 
 - A search returns at most 2,000 speeches.
 - The map starts at the May 2010 election.
+- The spreadsheet’s Committees / APPGs column lists committees only: Parliament doesn’t publish APPG membership in a form the site can look up.
 
 ## Data
 

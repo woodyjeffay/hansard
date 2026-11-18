@@ -7,6 +7,10 @@
 //   4. drawChart     draws one bar per month, split by party
 //   5. showMap       puts each MP's speeches on a map of constituencies
 //
+// Each search is also written into the page's address (?q=...&from=...),
+// so the address can be shared, and the results can be downloaded as a
+// spreadsheet (xlsx.js builds the file).
+//
 // The browser isn't allowed to ask Parliament directly, so every request
 // goes to our own server (server.mjs), which passes it on.
 
@@ -92,7 +96,10 @@ async function ask(path) {
   try {
     return await fetch(path);
   } catch (error) {
-    throw new Error("Couldn’t reach the server. Check Terminal is still running node server.mjs, and that the address bar says http://localhost:3000.");
+    if (location.hostname === "localhost") {
+      throw new Error("Couldn’t reach the server. Check Terminal is still running node server.mjs, and that the address bar says http://localhost:3000.");
+    }
+    throw new Error("Couldn’t reach the server. Check your internet connection and try again.");
   }
 }
 
@@ -130,6 +137,7 @@ function isoDate(date) {
 // Is this date inside a spell (of party membership, or holding a seat)?
 // Spells have a startDate and an endDate, which is null if it hasn't ended.
 function during(spell, date) {
+  if (!spell.startDate) return false;
   const started = spell.startDate.slice(0, 10);
   const ended = spell.endDate === null ? null : spell.endDate.slice(0, 10);
   return started <= date && (ended === null || date < ended);
@@ -145,6 +153,29 @@ const yearAgo = new Date();
 yearAgo.setFullYear(today.getFullYear() - 1);
 document.getElementById("start").value = isoDate(yearAgo);
 document.getElementById("end").value = isoDate(today);
+
+// A shared link carries its search in the address:
+//   ?q=grey+belt&from=2024-11-18&to=2025-11-18&house=Commons
+// Read it back into the form. Returns true if there was a search to run.
+function readSharedSearch() {
+  const params = new URLSearchParams(location.search);
+  const word = (params.get("q") ?? "").trim();
+  if (word === "") return false;
+  const isDate = (text) => /^\d{4}-\d{2}-\d{2}$/.test(text ?? "");
+  document.getElementById("word").value = word;
+  if (isDate(params.get("from"))) document.getElementById("start").value = params.get("from");
+  if (isDate(params.get("to"))) document.getElementById("end").value = params.get("to");
+  const house = params.get("house") ?? "";
+  document.getElementById("house").value = ["Commons", "Lords"].includes(house) ? house : "";
+  return true;
+}
+
+// The address that reruns this search
+function searchAddress(search) {
+  const params = new URLSearchParams({ q: search.word, from: search.start, to: search.end });
+  if (search.house !== "") params.set("house", search.house);
+  return location.origin + location.pathname + "?" + params;
+}
 
 // Opened by double-clicking the file? Then there's no server to ask.
 if (location.protocol === "file:") {
@@ -236,11 +267,18 @@ async function getHistories(speeches) {
       if (response.ok) {
         const data = await response.json();
         histories[id] = {
-          parties: data.value.partyAffiliations,   // every party, with dates
-          seats: data.value.representations,       // every constituency, with dates (none for peers)
+          parties: data.value.partyAffiliations ?? [],      // every party, with dates
+          seats: data.value.representations ?? [],          // every constituency, with dates (none for peers)
+          posts: [                                          // ministerial, shadow and other jobs, with dates
+            ...(data.value.governmentPosts ?? []),
+            ...(data.value.oppositionPosts ?? []),
+            ...(data.value.otherPosts ?? []),
+          ],
+          committees: data.value.committeeMemberships ?? [], // select committees and the like, with dates
         };
       } else {
-        histories[id] = { parties: [], seats: [] };   // couldn't find them: they'll count as Other
+        // Couldn't find them: they'll count as Other
+        histories[id] = { parties: [], seats: [], posts: [], committees: [] };
       }
     }));
     setStatus("Looked up " + Math.min(i + BATCH_SIZE, ids.length) + " of " + ids.length + " speakers…");
@@ -257,6 +295,27 @@ function getParty(memberId, date) {
 function getSeat(memberId, date) {
   const spell = (histories[memberId]?.seats ?? []).find((s) => during(s, date));
   return spell ? spell.name : null;
+}
+
+// The names of the spells in a list that were running on this date, each once
+function namesOn(spells, date) {
+  return [...new Set((spells ?? []).filter((s) => during(s, date)).map((s) => s.name.trim()))];
+}
+
+// Which committees was this member on, on this date?
+function getCommittees(memberId, date) {
+  return namesOn(histories[memberId]?.committees, date);
+}
+
+// What were they speaking as? Hansard names the role a minister or shadow
+// speaks in ("The Minister for Housing (Matthew Pennycook)"); otherwise use
+// the posts they held that day, or failing that just MP or peer.
+function getTitle(speech, date) {
+  const role = /^(.*\S)\s*\(([^()]*)\)\s*$/.exec(speech.AttributedTo ?? "");
+  if (role !== null && role[2].trim() === speech.MemberName.trim()) return role[1];
+  const posts = namesOn(histories[speech.MemberId]?.posts, date);
+  if (posts.length > 0) return posts.join("; ");
+  return speech.House === "Lords" ? "Member of the House of Lords" : "MP";
 }
 
 // Which map a speech on this date belongs on: "current", "old", or null (before 2010)
@@ -423,23 +482,37 @@ document.getElementById("chart").addEventListener("mouseleave", hideTooltip);
 let latestPattern = null;   // the phrase pattern from the latest search
 const links = {};           // Hansard web links already looked up, by speech ID
 
-// The bit of the speech around the phrase, with the phrase highlighted
-function snippet(speech) {
-  const text = plainText(speech).replace(/\s+/g, " ");
+// The bit of the speech around the phrase, in three parts:
+// { before, phrase, after }, with … where the speech was cut
+function snippetParts(speech) {
+  const text = plainText(speech).replace(/\s+/g, " ").trim();
   const match = latestPattern.exec(text);
   if (match === null) {
-    return escapeHtml(text.slice(0, 300)) + "…";
+    return { before: text.slice(0, 300) + (text.length > 300 ? "…" : ""), phrase: "", after: "" };
   }
   let from = Math.max(0, match.index - 220);
   let to = Math.min(text.length, match.index + match[0].length + 220);
   // Don't cut words in half
   if (from > 0) from = text.indexOf(" ", from) + 1;
   if (to < text.length) to = text.lastIndexOf(" ", to);
+  return {
+    before: (from > 0 ? "…" : "") + text.slice(from, match.index),
+    phrase: match[0],
+    after: text.slice(match.index + match[0].length, to) + (to < text.length ? "…" : ""),
+  };
+}
 
-  const before = escapeHtml(text.slice(from, match.index));
-  const phrase = escapeHtml(match[0]);
-  const after = escapeHtml(text.slice(match.index + match[0].length, to));
-  return (from > 0 ? "…" : "") + before + "<mark>" + phrase + "</mark>" + after + (to < text.length ? "…" : "");
+// The snippet for the page, with the phrase highlighted
+function snippet(speech) {
+  const part = snippetParts(speech);
+  const phrase = part.phrase === "" ? "" : "<mark>" + escapeHtml(part.phrase) + "</mark>";
+  return escapeHtml(part.before) + phrase + escapeHtml(part.after);
+}
+
+// The snippet for the spreadsheet, as plain text
+function plainSnippet(speech) {
+  const part = snippetParts(speech);
+  return part.before + part.phrase + part.after;
 }
 
 function speechHtml(speech) {
@@ -860,17 +933,97 @@ document.getElementById("view-toggle").addEventListener("click", (event) => {
 });
 
 
-// --- 9. Run a search when "Chart it" is pressed ------------------------------
+// --- 9. Sharing and downloading ---------------------------------------------
+
+let latestSearch = null;     // { word, start, end, house } of the search on screen
+let latestSpeeches = [];     // its speeches
+
+function setActionNote(message) {
+  document.getElementById("action-note").textContent = message;
+}
+
+// Share: the phone's share sheet if there is one, otherwise copy the link
+document.getElementById("share").addEventListener("click", async () => {
+  const url = searchAddress(latestSearch);
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "Parliamentary Word Watch: “" + latestSearch.word + "”", url: url });
+      return;
+    } catch (error) {
+      if (error.name === "AbortError") return;   // they closed the share sheet
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    setActionNote("Link copied. Anyone who opens it will see this search.");
+  } catch (error) {
+    // No clipboard (an older browser, or not allowed): show the link to copy by hand
+    setActionNote("Copy this link: " + url);
+  }
+});
+
+// One row per speech, oldest first
+function spreadsheetRows(speeches) {
+  return inOrder(speeches).map((speech) => {
+    const day = speech.SittingDate.slice(0, 10);
+    const [year, month, date] = day.split("-").map(Number);
+    return [
+      getTitle(speech, day),
+      speech.MemberName.trim(),
+      speech.seat ?? "",
+      new Date(year, month - 1, date),
+      speech.DebateSection.trim(),
+      plainSnippet(speech),
+      getCommittees(speech.MemberId, day).join("; "),
+    ];
+  });
+}
+
+document.getElementById("download").addEventListener("click", () => {
+  const search = latestSearch;
+  const blob = makeXlsx({
+    sheetName: search.word,
+    columns: [
+      { header: "Title", width: 30 },
+      { header: "Name", width: 24 },
+      { header: "Constituency", width: 24 },
+      { header: "Date", width: 12 },
+      { header: "Debate", width: 36 },
+      { header: "Quote", width: 80 },
+      { header: "Committees / APPGs", width: 40 },
+    ],
+    rows: spreadsheetRows(latestSpeeches),
+  });
+  const slug = search.word.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "search";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `hansard-${slug}-${search.start}-to-${search.end}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  setActionNote("");
+});
+
+
+// --- 10. Run a search when "Chart it" is pressed -----------------------------
 
 document.getElementById("search").addEventListener("submit", async (event) => {
   event.preventDefault();   // stop the page reloading
   const button = event.target.querySelector("button");
-  const word = document.getElementById("word").value;
+  const word = document.getElementById("word").value.trim();
   const start = document.getElementById("start").value;
   const end = document.getElementById("end").value;
   const house = document.getElementById("house").value;
+  if (word === "") return setStatus("Type a word or phrase to search for.");
+
+  // Put the search in the address, so it can be shared or bookmarked
+  const search = { word, start, end, house };
+  history.replaceState(null, "", searchAddress(search));
 
   button.disabled = true;
+  document.getElementById("actions").hidden = true;
+  setActionNote("");
   try {
     setStatus("Searching Hansard… (more common words can take a little while)");
     const found = await getSpeeches(word, start, end, house);
@@ -888,6 +1041,11 @@ document.getElementById("search").addEventListener("submit", async (event) => {
     message += " Click a month to read them.";
     setStatus(message);
 
+    latestSearch = search;
+    latestSpeeches = speeches;
+    document.getElementById("download").disabled = speeches.length === 0;
+    document.getElementById("actions").hidden = false;
+
     // The map is extra: if it can't load, keep the chart and say why
     try {
       await showMap(speeches, start, end);
@@ -900,3 +1058,8 @@ document.getElementById("search").addEventListener("submit", async (event) => {
   }
   button.disabled = false;
 });
+
+// Opened from a shared link? Run its search straight away.
+if (location.protocol !== "file:" && readSharedSearch()) {
+  document.getElementById("search").requestSubmit();
+}

@@ -5,18 +5,18 @@
 // 2. Passes the page's questions on to Parliament and hands back the answers.
 //    Browsers aren't allowed to ask Parliament's servers directly; Node is.
 //      /api/speeches     -> Hansard's search (every speech containing a phrase)
-//      /api/member?id=   -> the Members API (a member's parties and seats, with dates)
+//      /api/member?id=   -> the Members API (a member's parties, seats, posts and committees)
 //      /api/link?id=     -> Hansard's web address for one speech
+//
+// The /api answers live in lib/parliament.mjs, shared with the api/ folder
+// that Vercel uses when the site is deployed there.
 //
 // Run it with:   node server.mjs   (or npm start)
 // Then open:     http://localhost:3000
 
 import http from "node:http";
 import fs from "node:fs";
-
-const HANSARD = "https://hansard-api.parliament.uk/search/contributions/Spoken.json";
-const MEMBERS = "https://members-api.parliament.uk/api/Members/";
-const LINKS = "https://hansard-api.parliament.uk/search/parlisearchredirect.json?externalId=";
+import { speeches, member, link } from "./lib/parliament.mjs";
 
 // The files the page is allowed to ask for, and what kind of file each is.
 // Anything not listed gets "Not found", so nobody can read other files.
@@ -24,6 +24,7 @@ const FILES = {
   "/":                                 ["index.html", "text/html; charset=utf-8"],
   "/style.css":                        ["style.css", "text/css; charset=utf-8"],
   "/script.js":                        ["script.js", "text/javascript; charset=utf-8"],
+  "/xlsx.js":                          ["xlsx.js", "text/javascript; charset=utf-8"],
   "/maps/constituencies-2024.hexjson": ["maps/constituencies-2024.hexjson", "application/json; charset=utf-8"],
   "/maps/constituencies-2010.hexjson": ["maps/constituencies-2010.hexjson", "application/json; charset=utf-8"],
 };
@@ -31,24 +32,6 @@ const FILES = {
 // Files sit next to this script, so find them from here. That way the
 // server works whichever folder you start it from.
 const here = (name) => new URL(name, import.meta.url);
-
-// Ask Parliament for something and hand its answer straight back.
-async function passOn(targetUrl, response) {
-  try {
-    const reply = await fetch(targetUrl);
-    response.writeHead(reply.status, { "Content-Type": "application/json" });
-    response.end(await reply.text());
-  } catch (error) {
-    response.writeHead(502, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ error: error.message }));
-  }
-}
-
-// Turn away a request that doesn't make sense
-function refuse(response, message) {
-  response.writeHead(400, { "Content-Type": "application/json" });
-  response.end(JSON.stringify({ error: message }));
-}
 
 async function handle(request, response) {
   const address = new URL(request.url, "http://localhost");
@@ -62,17 +45,11 @@ async function handle(request, response) {
     response.writeHead(200, { "Content-Type": type });
     response.end(contents);
   } else if (path === "/api/speeches") {
-    await passOn(HANSARD + address.search, response);
+    await speeches(request, response);
   } else if (path === "/api/member") {
-    // Only pass on whole numbers, never anything else someone types into the URL
-    const id = Number(address.searchParams.get("id"));
-    if (!Number.isInteger(id)) return refuse(response, "id must be a number");
-    await passOn(MEMBERS + id + "/Biography", response);
+    await member(request, response);
   } else if (path === "/api/link") {
-    // Speech IDs look like 221F53ED-C9FB-4FC7-A871-09567FF9EC62; refuse anything else
-    const id = address.searchParams.get("id") ?? "";
-    if (!/^[0-9A-Fa-f-]{36}$/.test(id)) return refuse(response, "not a speech id");
-    await passOn(LINKS + id, response);
+    await link(request, response);
   } else {
     response.writeHead(404);
     response.end("Not found");
